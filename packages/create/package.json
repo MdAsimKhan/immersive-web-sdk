@@ -16,7 +16,10 @@
     "build": "rollup -c",
     "dev": "pnpm -s build && node dist/cli.js",
     "watch": "rollup -c --watch",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "create",
@@ -48,6 +51,7 @@
   "devDependencies": {
     "@types/prompts": "^2.4.9",
     "@types/semver": "^7.5.8",
-    "@types/cross-spawn": "^6.0.6"
+    "@types/cross-spawn": "^6.0.6",
+    "vitest": "^2.1.8"
   }
 }

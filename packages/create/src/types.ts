@@ -9,6 +9,27 @@ export type VariantId =
   `${'vr' | 'ar'}-${'manual' | 'metaspatial'}-${'ts' | 'js'}`;
 export type TriState = 'no' | 'optional' | 'required';
 
+/**
+ * Platform type for MSE installation detection
+ */
+export type Platform = 'darwin' | 'win32' | 'linux';
+
+/**
+ * Result of MSE installation attempt
+ */
+export interface MSEInstallResult {
+  /** Whether MSE is installed (may be outdated) */
+  installed: boolean;
+  /** Detected version string, or null if not installed */
+  version: string | null;
+  /** True if user needs to complete manual installation */
+  manual: boolean;
+  /** True if installed but below minimum required version */
+  outdated?: boolean;
+  /** Error that occurred during installation, if any */
+  error?: Error;
+}
+
 export type ActionItem = {
   message: string;
   level?: 'info' | 'warning' | 'important';
@@ -36,4 +57,6 @@ export type PromptResult = {
   xrFeatureStates: Record<string, TriState>;
   actionItems?: ActionItem[];
   prerequisites?: ActionItem[];
+  /** Result of MSE installation attempt (only set when metaspatial is true) */
+  mseInstallResult?: MSEInstallResult;
 };

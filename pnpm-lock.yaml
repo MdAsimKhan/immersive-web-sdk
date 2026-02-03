@@ -182,6 +182,9 @@ importers:
       '@types/semver':
         specifier: ^7.5.8
         version: 7.7.1
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@20.19.25)(terser@5.44.1)
 
   packages/glxf:
     dependencies:
