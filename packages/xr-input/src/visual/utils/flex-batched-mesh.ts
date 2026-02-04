@@ -5,10 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { BatchedMesh, Group, Material, Matrix4, Mesh, Object3D } from 'three';
+import { Group, Material, Matrix4, Mesh, Object3D } from 'three';
+import { SimpleBatchedMesh } from './simple-batched-mesh.js';
 
 export class FlexBatchedMesh extends Group {
-  private batchedMeshes = new Map<Material, BatchedMesh>();
+  private batchedMeshes = new Map<Material, SimpleBatchedMesh>();
   private batchedIndices = new Map<Mesh, number>();
 
   constructor(private refMesh: Object3D) {
@@ -34,7 +35,7 @@ export class FlexBatchedMesh extends Group {
       materialGroups.get(material)!.push(mesh);
     });
 
-    // Create a BatchedMesh for each material group
+    // Create a SimpleBatchedMesh for each material group
     materialGroups.forEach((meshes, material) => {
       let geometryCount = 0;
       let vertexCount = 0;
@@ -46,18 +47,22 @@ export class FlexBatchedMesh extends Group {
         geometryCount++;
       });
 
-      const batchedMesh = new BatchedMesh(
+      const batchedMesh = new SimpleBatchedMesh(
         geometryCount,
         vertexCount,
         indexCount,
         material,
       );
+      // Disable frustum culling - controllers move dynamically and bounding volumes
+      // may not update correctly, especially in multiview rendering
+      batchedMesh.frustumCulled = false;
       this.batchedMeshes.set(material, batchedMesh);
       this.add(batchedMesh);
 
       meshes.forEach((mesh) => {
+        // SimpleBatchedMesh uses the r165 API where addGeometry returns the ID directly
         const geometryId = batchedMesh.addGeometry(mesh.geometry);
-        this.batchedIndices.set(mesh, batchedMesh.addInstance(geometryId));
+        this.batchedIndices.set(mesh, geometryId);
       });
     });
   }
@@ -76,7 +81,7 @@ export class FlexBatchedMesh extends Group {
       }
     });
 
-    // Update each BatchedMesh with the new matrices
+    // Update each SimpleBatchedMesh with the new matrices
     this.batchedIndices.forEach((batchedIndex, mesh) => {
       const material = mesh.material as Material;
       const batchedMesh = this.batchedMeshes.get(material);
