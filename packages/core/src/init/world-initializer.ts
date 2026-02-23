@@ -350,6 +350,10 @@ function manageOfferFlow(world: World, mode: 'once' | 'always') {
       const refSpec = normalizeReferenceSpec(opts.referenceSpace);
       session.addEventListener('end', onEnd);
       try {
+        // disable built-in occlusion
+        world.renderer.xr.getDepthSensingMesh = function () {
+          return null;
+        };
         const resolvedType = await resolveReferenceSpaceType(
           session,
           refSpec.type,

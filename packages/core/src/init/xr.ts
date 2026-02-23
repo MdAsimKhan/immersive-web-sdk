@@ -268,6 +268,10 @@ export function launchXR(world: World, options?: Partial<XROptions>) {
         refSpec.type,
         refSpec.required ? [] : refSpec.fallbackOrder,
       );
+      // disable built-in occlusion
+      world.renderer.xr.getDepthSensingMesh = function () {
+        return null;
+      };
       world.renderer.xr.setReferenceSpaceType(
         resolvedType as unknown as XRReferenceSpaceType,
       );

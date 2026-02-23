@@ -26,6 +26,7 @@ export * from './environment-raycast/index.js';
 export * from './audio/index.js';
 export * from './physics/index.js';
 export * from './camera/index.js';
+export * from './depth/index.js';
 
 // re-exports
 export * from '@iwsdk/xr-input';
