@@ -7,6 +7,7 @@
 
 import {
   XRAnchor,
+  AssetType,
   Color,
   XRMesh,
   XRPlane,
@@ -15,6 +16,8 @@ import {
   createSystem,
   Interactable,
   DistanceGrabbable,
+  IBLTexture,
+  DomeTexture,
   Mesh,
   SphereGeometry,
   MeshStandardMaterial,
@@ -90,7 +93,13 @@ export class SceneShowSystem extends createSystem({
 }
 
 World.create(document.getElementById('scene-container'), {
-  undefined,
+  assets: {
+    veniceSunset: {
+      url: './textures/venice_sunset_1k.exr',
+      type: AssetType.HDRTexture,
+      priority: 'critical',
+    },
+  },
   xr: {
     sessionMode: SessionMode.ImmersiveAR,
     referenceSpace: ReferenceSpaceType.Unbounded,
@@ -110,6 +119,10 @@ World.create(document.getElementById('scene-container'), {
   const { scene } = world;
 
   scene.background = new Color(0x808080);
+
+  const root = world.activeLevel.value;
+  root.addComponent(IBLTexture, { src: 'veniceSunset' });
+  root.addComponent(DomeTexture, { src: 'veniceSunset' });
 
   world.registerSystem(SceneShowSystem);
 });

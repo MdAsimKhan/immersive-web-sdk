@@ -77,6 +77,9 @@ export class EnvironmentSystem extends createSystem({
   private pmrem!: PMREMGenerator;
   private gradientGeometry?: SphereGeometry;
   private tmpColor: Color = new Color();
+  private recenterYawOffset: number = 0;
+  private resetListenerCleanup: (() => void) | null = null;
+  private needsResetListener: boolean = false;
 
   init(): void {
     this.pmrem = new PMREMGenerator(this.renderer);
@@ -93,9 +96,28 @@ export class EnvironmentSystem extends createSystem({
     this.cleanupFuncs.push(
       this.visibilityState.subscribe(() => this.updateBackgroundForXRMode()),
     );
+
+    // XR recenter compensation
+    this.xrManager.addEventListener('sessionstart', this.onXRSessionStart);
+    this.xrManager.addEventListener('sessionend', this.onXRSessionEnd);
+    this.cleanupFuncs.push(() => {
+      this.xrManager.removeEventListener('sessionstart', this.onXRSessionStart);
+      this.xrManager.removeEventListener('sessionend', this.onXRSessionEnd);
+      this.resetListenerCleanup?.();
+      this.resetListenerCleanup = null;
+    });
   }
 
   update(): void {
+    // Deferred reset listener attachment
+    if (this.needsResetListener) {
+      const refSpace = this.xrManager.getReferenceSpace();
+      if (refSpace) {
+        this.attachResetListener(refSpace);
+        this.needsResetListener = false;
+      }
+    }
+
     // Choose background source: DomeTexture > DomeGradient
     let backgroundEntity: Entity | undefined;
     for (const e of this.queries.domeTextures.entities) {
@@ -199,7 +221,11 @@ export class EnvironmentSystem extends createSystem({
     this.scene.backgroundBlurriness = blurriness;
     this.scene.backgroundIntensity = intensity;
     if (rot) {
-      this.scene.backgroundRotation?.set(rot[0] || 0, rot[1] || 0, rot[2] || 0);
+      this.scene.backgroundRotation?.set(
+        rot[0] || 0,
+        (rot[1] || 0) + this.recenterYawOffset,
+        rot[2] || 0,
+      );
     }
   }
 
@@ -295,7 +321,7 @@ export class EnvironmentSystem extends createSystem({
     if (rot) {
       this.scene.environmentRotation?.set(
         rot[0] || 0,
-        rot[1] || 0,
+        (rot[1] || 0) + this.recenterYawOffset,
         rot[2] || 0,
       );
     }
@@ -356,6 +382,76 @@ export class EnvironmentSystem extends createSystem({
       this.scene.environment = target.texture;
     } else {
       this.scene.environment = null;
+    }
+  }
+
+  // XR recenter handling
+  private onXRSessionStart = (): void => {
+    this.recenterYawOffset = 0;
+    const refSpace = this.xrManager.getReferenceSpace();
+    if (refSpace) {
+      this.attachResetListener(refSpace);
+    } else {
+      this.needsResetListener = true;
+    }
+  };
+
+  private attachResetListener(refSpace: XRReferenceSpace): void {
+    const onReset = (event: XRReferenceSpaceEvent) => {
+      this.onReferenceSpaceReset(event);
+    };
+    refSpace.addEventListener('reset', onReset);
+    this.resetListenerCleanup = () => {
+      refSpace.removeEventListener('reset', onReset);
+    };
+  }
+
+  private onXRSessionEnd = (): void => {
+    this.resetListenerCleanup?.();
+    this.resetListenerCleanup = null;
+    this.recenterYawOffset = 0;
+    this.needsResetListener = false;
+  };
+
+  private onReferenceSpaceReset(event: XRReferenceSpaceEvent): void {
+    const transform = event.transform;
+    if (!transform) {
+      return;
+    }
+
+    const q = transform.orientation;
+    const yaw = Math.atan2(
+      2 * (q.w * q.y + q.x * q.z),
+      1 - 2 * (q.y * q.y + q.z * q.z),
+    );
+
+    this.recenterYawOffset += yaw;
+    this.applyRecenterCompensation();
+  }
+
+  private applyRecenterCompensation(): void {
+    for (const entity of this.queries.iblTextures.entities) {
+      const rot = entity.getVectorView(IBLTexture, 'rotation');
+      if (rot) {
+        this.scene.environmentRotation?.set(
+          rot[0] || 0,
+          (rot[1] || 0) + this.recenterYawOffset,
+          rot[2] || 0,
+        );
+      }
+      break;
+    }
+
+    for (const entity of this.queries.domeTextures.entities) {
+      const rot = entity.getVectorView(DomeTexture, 'rotation');
+      if (rot) {
+        this.scene.backgroundRotation?.set(
+          rot[0] || 0,
+          (rot[1] || 0) + this.recenterYawOffset,
+          rot[2] || 0,
+        );
+      }
+      break;
     }
   }
 
