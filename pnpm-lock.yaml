@@ -259,17 +259,21 @@ importers:
   packages/vite-plugin-iwer:
     dependencies:
       '@iwer/devui':
-        specifier: ^1.1.2
-        version: 1.1.2(iwer@2.1.1)
+        specifier: ^2.2.0
+        version: 2.2.0(iwer@2.2.0)
       '@iwer/sem':
         specifier: ^0.2.5
-        version: 0.2.5(iwer@2.1.1)
+        version: 0.2.5(iwer@2.2.0)
       iwer:
-        specifier: ^2.0.1
-        version: 2.1.1
+        specifier: ^2.2.0
+        version: 2.2.0
       vite:
         specifier: ^7.0.0
         version: 7.2.4(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)
+    devDependencies:
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@20.19.25)(terser@5.44.1)
 
   packages/vite-plugin-metaspatial:
     dependencies:
@@ -920,6 +924,7 @@ packages:
 
   '@fortawesome/react-fontawesome@0.2.2':
     resolution: {integrity: sha512-EnkrprPNqI6SXJl//m29hpaNzOp1bruISWaOiRtkMi/xSvHJlzc2j2JAYS7egxt/EbjSNV/k6Xy0AQI6vB2+1g==}
+    deprecated: v0.2.x is no longer supported. Unless you are still using FontAwesome 5, please update to v3.1.1 or greater.
     peerDependencies:
       '@fortawesome/fontawesome-svg-core': ~1 || ~6
       react: '>=16.3'
@@ -1122,10 +1127,10 @@ packages:
     resolution: {integrity: sha512-ZXRY4jNvVgSVQ8DL3LTcakaAtXwTVUxE81hslsyD2AtoXW/wVob10HkOJ1X/pAlcI7D+2YoZKg5do8G/w6RYgA==}
     engines: {node: '>=8'}
 
-  '@iwer/devui@1.1.2':
-    resolution: {integrity: sha512-ggF1lXSX14BTYP0QzB4xaurySr2PC+3+rtK/dpCR++giWquzFv2mBw3LW/PaCtdl5mqkZMrQ2GSwfUNg9ZoO+w==}
+  '@iwer/devui@2.2.0':
+    resolution: {integrity: sha512-VYPxX1k1Z27Uguu5KMH+99yu80KYa0sEiA7e3O38i03t/fubBMtiKQE7IYQvDrvA99nNAyZfDQ5w1Q0q+tkLfg==}
     peerDependencies:
-      iwer: ^2.0.1
+      iwer: ^2.2.0
 
   '@iwer/sem@0.2.5':
     resolution: {integrity: sha512-vMCfpu/7Qqc+hkBiGD9pxjeObgrhXOrL0KX94CA3yzJaU0dq0y49HXZT6fC+6X/jOmjaM3hjyE1m2h7ZmLzzyA==}
@@ -2826,8 +2831,8 @@ packages:
     resolution: {integrity: sha512-HGYWWS/ehqTV3xN10i23tkPkpH46MLCIMFNCaaKNavAXTF1RkqxawEPtnjnGZ6XKSInBKkiOA5BKS+aZiY3AvA==}
     engines: {node: '>=8'}
 
-  iwer@2.1.1:
-    resolution: {integrity: sha512-3VuQhekh/3BMRlaS7FFjcTNjKOwURAgL7mu0HndU72mFNyRyHRpGfhXGZ1iJkjfq/vEw0v1b7fx8k1knGSQ5gQ==}
+  iwer@2.2.0:
+    resolution: {integrity: sha512-AfhCP9JjdFNLIEFNY342PaHS8RUH44iCUGDskHM3CUKvDu1aPOCQCJ+IfIvvYqUeUooDvG5UyrTeXz0yzfZmGw==}
 
   jackspeak@3.4.3:
     resolution: {integrity: sha512-OGlZQpz2yfahA/Rd1Y8Cd9SIEsqvXkLVoSw/cgwhnhFMDbsQFeZYoJJ7bIZBS9BcamUW96asq/npPWugM+RQBw==}
@@ -4899,14 +4904,14 @@ snapshots:
 
   '@istanbuljs/schema@0.1.3': {}
 
-  '@iwer/devui@1.1.2(iwer@2.1.1)':
+  '@iwer/devui@2.2.0(iwer@2.2.0)':
     dependencies:
       '@fortawesome/fontawesome-svg-core': 6.6.0
       '@fortawesome/free-solid-svg-icons': 6.6.0
       '@fortawesome/react-fontawesome': 0.2.2(@fortawesome/fontawesome-svg-core@6.6.0)(react@19.2.0)
       '@pmndrs/handle': 6.6.28(react@19.2.0)
       '@pmndrs/pointer-events': 6.6.28
-      iwer: 2.1.1
+      iwer: 2.2.0
       react: 19.2.0
       react-dom: 19.2.0(react@19.2.0)
       styled-components: 6.1.19(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -4915,9 +4920,9 @@ snapshots:
       - '@types/react'
       - immer
 
-  '@iwer/sem@0.2.5(iwer@2.1.1)':
+  '@iwer/sem@0.2.5(iwer@2.2.0)':
     dependencies:
-      iwer: 2.1.1
+      iwer: 2.2.0
       three: super-three@0.181.0
       ts-proto: 2.8.3
 
@@ -6804,7 +6809,7 @@ snapshots:
       html-escaper: 2.0.2
       istanbul-lib-report: 3.0.1
 
-  iwer@2.1.1:
+  iwer@2.2.0:
     dependencies:
       gl-matrix: 3.4.4
       webxr-layers-polyfill: 1.1.0

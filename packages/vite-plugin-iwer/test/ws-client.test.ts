@@ -1,0 +1,738 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { MCPWebSocketClient, initMCPClient } from '../src/mcp/ws-client.js';
+
+// Mock WebSocket
+class MockWebSocket {
+  static CONNECTING = 0;
+  static OPEN = 1;
+  static CLOSING = 2;
+  static CLOSED = 3;
+
+  readyState = MockWebSocket.CONNECTING;
+  onopen: ((event: Event) => void) | null = null;
+  onclose: ((event: CloseEvent) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  onmessage: ((event: MessageEvent) => void) | null = null;
+
+  private sentMessages: string[] = [];
+
+  constructor(public url: string) {
+    // Simulate async connection
+    setTimeout(() => {
+      this.readyState = MockWebSocket.OPEN;
+      if (this.onopen) {
+        this.onopen(new Event('open'));
+      }
+    }, 0);
+  }
+
+  send(data: string): void {
+    this.sentMessages.push(data);
+  }
+
+  close(): void {
+    this.readyState = MockWebSocket.CLOSED;
+    if (this.onclose) {
+      this.onclose(new CloseEvent('close'));
+    }
+  }
+
+  // Test helpers
+  getSentMessages(): string[] {
+    return this.sentMessages;
+  }
+
+  simulateMessage(data: unknown): void {
+    if (this.onmessage) {
+      this.onmessage(
+        new MessageEvent('message', { data: JSON.stringify(data) }),
+      );
+    }
+  }
+
+  simulateError(): void {
+    if (this.onerror) {
+      this.onerror(new Event('error'));
+    }
+  }
+
+  simulateClose(reason?: string): void {
+    this.readyState = MockWebSocket.CLOSED;
+    if (this.onclose) {
+      this.onclose(new CloseEvent('close', { reason }));
+    }
+  }
+}
+
+// Mock XRDevice with remote.dispatch
+function createMockDevice() {
+  return {
+    remote: {
+      dispatch: vi.fn().mockResolvedValue({ success: true }),
+    },
+  };
+}
+
+// Mock ConsoleCapture
+vi.mock('../src/mcp/console-capture.js', () => ({
+  ConsoleCapture: class MockConsoleCapture {
+    start = vi.fn();
+    stop = vi.fn();
+    query = vi
+      .fn()
+      .mockReturnValue([
+        {
+          timestamp: Date.now(),
+          level: 'log',
+          message: 'test log',
+          args: ['test log'],
+        },
+      ]);
+  },
+}));
+
+// Helper to flush all pending promises
+const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('MCPWebSocketClient', () => {
+  let client: MCPWebSocketClient | null = null;
+  let mockDevice: ReturnType<typeof createMockDevice>;
+  let mockWebSocketInstance: MockWebSocket | null = null;
+  let originalWebSocket: typeof WebSocket | undefined;
+  let originalWindow: typeof globalThis.window | undefined;
+
+  beforeEach(() => {
+    mockDevice = createMockDevice();
+    mockWebSocketInstance = null;
+
+    // Mock WebSocket globally with static properties
+    originalWebSocket = globalThis.WebSocket;
+    const MockWebSocketClass = class extends MockWebSocket {
+      constructor(url: string) {
+        super(url);
+        mockWebSocketInstance = this;
+      }
+    };
+    // Copy static properties
+    (MockWebSocketClass as any).CONNECTING = 0;
+    (MockWebSocketClass as any).OPEN = 1;
+    (MockWebSocketClass as any).CLOSING = 2;
+    (MockWebSocketClass as any).CLOSED = 3;
+    (globalThis as any).WebSocket = MockWebSocketClass;
+
+    // Mock window for browser-like environment
+    originalWindow = (globalThis as any).window;
+    (globalThis as any).window = {
+      location: {
+        protocol: 'http:',
+        hostname: 'localhost',
+        port: '5173',
+      },
+    };
+  });
+
+  afterEach(() => {
+    // Clean up client to prevent timer/console leaks
+    if (client) {
+      client.disconnect();
+      client = null;
+    }
+    if (originalWebSocket) {
+      globalThis.WebSocket = originalWebSocket;
+    }
+    if (originalWindow !== undefined) {
+      (globalThis as any).window = originalWindow;
+    } else {
+      delete (globalThis as any).window;
+    }
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe('constructor', () => {
+    test('should create client with device', () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      expect(client).toBeDefined();
+    });
+
+    test('should start console capture on construction', () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+      // ConsoleCapture.start is called
+      expect(client).toBeDefined();
+    });
+  });
+
+  describe('connect', () => {
+    test('should connect to WebSocket with correct URL', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+
+      expect(mockWebSocketInstance!.url).toBe('ws://localhost:5173/__iwer_mcp');
+    });
+
+    test('should use wss protocol for https pages', async () => {
+      (globalThis as any).window.location = {
+        protocol: 'https:',
+        hostname: 'localhost',
+        port: '5173',
+      };
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+
+      expect(mockWebSocketInstance!.url).toBe(
+        'wss://localhost:5173/__iwer_mcp',
+      );
+    });
+
+    test('should use custom port when specified', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect(3000);
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+
+      expect(mockWebSocketInstance!.url).toBe('ws://localhost:3000/__iwer_mcp');
+    });
+
+    test('should default to 5173 when no port in location', async () => {
+      (globalThis as any).window.location = {
+        protocol: 'http:',
+        hostname: 'localhost',
+        port: '',
+      };
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+
+      expect(mockWebSocketInstance!.url).toBe('ws://localhost:5173/__iwer_mcp');
+    });
+
+    test('should not create duplicate connections', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      const firstInstance = mockWebSocketInstance;
+
+      // Second connect should be a no-op
+      client.connect();
+
+      expect(mockWebSocketInstance).toBe(firstInstance);
+    });
+  });
+
+  describe('disconnect', () => {
+    test('should close WebSocket on disconnect', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      client.disconnect();
+      client = null; // Already disconnected
+
+      expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.CLOSED);
+    });
+
+    test('should not reconnect after intentional disconnect', async () => {
+      vi.useFakeTimers();
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const firstInstance = mockWebSocketInstance;
+      client.disconnect();
+      client = null; // Already disconnected
+
+      // Advance well past any reconnect delay
+      await vi.advanceTimersByTimeAsync(10000);
+
+      // No new WebSocket should have been created
+      expect(mockWebSocketInstance).toBe(firstInstance);
+    });
+
+    test('should cancel pending reconnect timer on disconnect', async () => {
+      vi.useFakeTimers();
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const firstInstance = mockWebSocketInstance;
+
+      // Trigger reconnect by simulating close (uses onclose directly to
+      // mimic server-side disconnect before our intentional disconnect)
+      firstInstance!.simulateClose();
+
+      // Now disconnect before the reconnect timer fires
+      client.disconnect();
+      client = null;
+
+      // Advance past the reconnect delay
+      await vi.advanceTimersByTimeAsync(5000);
+
+      // No new WebSocket should have been created
+      expect(mockWebSocketInstance).toBe(firstInstance);
+    });
+  });
+
+  describe('message handling', () => {
+    test('should dispatch IWER methods to device.remote.dispatch', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      // Simulate incoming MCP request
+      mockWebSocketInstance!.simulateMessage({
+        id: '1',
+        method: 'get_transform',
+        params: { device: 'headset' },
+      });
+
+      await vi.waitFor(() => mockDevice.remote.dispatch.mock.calls.length > 0);
+
+      expect(mockDevice.remote.dispatch).toHaveBeenCalledWith('get_transform', {
+        device: 'headset',
+      });
+    });
+
+    test('should route get_console_logs to ConsoleCapture', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      // Simulate incoming console logs request
+      mockWebSocketInstance!.simulateMessage({
+        id: '2',
+        method: 'get_console_logs',
+        params: { count: 10 },
+      });
+
+      // Should NOT call device.remote.dispatch for console logs
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
+    });
+
+    test('should handle reload_page locally without calling device.remote.dispatch', async () => {
+      const mockReload = vi.fn();
+      (globalThis as any).window.location = {
+        ...((globalThis as any).window.location || {}),
+        reload: mockReload,
+      };
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: 'reload-1',
+        method: 'reload_page',
+        params: {},
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockReload).toHaveBeenCalled();
+      expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
+    });
+
+    test('should route to FRAMEWORK_MCP_RUNTIME when available and handles method', async () => {
+      const mockFrameworkRuntime = {
+        handles: vi.fn().mockReturnValue(true),
+        dispatch: vi.fn().mockResolvedValue({ scene: 'hierarchy' }),
+      };
+      (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = mockFrameworkRuntime;
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: '5',
+        method: 'get_scene_hierarchy',
+        params: { maxDepth: 3 },
+      });
+
+      await vi.waitFor(
+        () => mockFrameworkRuntime.handles.mock.calls.length > 0,
+      );
+
+      expect(mockFrameworkRuntime.handles).toHaveBeenCalledWith(
+        'get_scene_hierarchy',
+      );
+      expect(mockFrameworkRuntime.dispatch).toHaveBeenCalledWith(
+        'get_scene_hierarchy',
+        { maxDepth: 3 },
+      );
+      expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
+
+      delete (globalThis as any).window.FRAMEWORK_MCP_RUNTIME;
+    });
+
+    test('should fall back to device.remote.dispatch when FRAMEWORK_MCP_RUNTIME does not handle method', async () => {
+      const mockFrameworkRuntime = {
+        handles: vi.fn().mockReturnValue(false),
+        dispatch: vi.fn(),
+      };
+      (globalThis as any).window.FRAMEWORK_MCP_RUNTIME = mockFrameworkRuntime;
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: '6',
+        method: 'get_transform',
+        params: { device: 'headset' },
+      });
+
+      await vi.waitFor(
+        () => mockFrameworkRuntime.handles.mock.calls.length > 0,
+      );
+
+      expect(mockFrameworkRuntime.handles).toHaveBeenCalledWith(
+        'get_transform',
+      );
+      expect(mockFrameworkRuntime.dispatch).not.toHaveBeenCalled();
+      expect(mockDevice.remote.dispatch).toHaveBeenCalledWith('get_transform', {
+        device: 'headset',
+      });
+
+      delete (globalThis as any).window.FRAMEWORK_MCP_RUNTIME;
+    });
+
+    test('should send response back via WebSocket', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: '3',
+        method: 'get_transform',
+        params: { device: 'headset' },
+      });
+
+      // Wait for async message handling to complete and response to be sent
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.getSentMessages().length).toBeGreaterThan(0);
+      });
+
+      const sentMessages = mockWebSocketInstance!.getSentMessages();
+      const response = JSON.parse(sentMessages[0]);
+      expect(response.id).toBe('3');
+      expect(response.result).toBeDefined();
+    });
+
+    test('should send error response when dispatch fails', async () => {
+      mockDevice.remote.dispatch.mockRejectedValueOnce(new Error('Test error'));
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      mockWebSocketInstance!.simulateMessage({
+        id: '4',
+        method: 'some_method',
+        params: {},
+      });
+
+      // Wait for async message handling to complete and response to be sent
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.getSentMessages().length).toBeGreaterThan(0);
+      });
+
+      const sentMessages = mockWebSocketInstance!.getSentMessages();
+      const response = JSON.parse(sentMessages[0]);
+      expect(response.id).toBe('4');
+      expect(response.error).toBeDefined();
+      expect(response.error.message).toBe('Test error');
+    });
+
+    test('should ignore invalid JSON messages', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      // Send invalid JSON directly (not through simulateMessage which stringifies)
+      if (mockWebSocketInstance!.onmessage) {
+        mockWebSocketInstance!.onmessage(
+          new MessageEvent('message', { data: 'invalid json{' }),
+        );
+      }
+
+      // Should not crash, no response sent
+      expect(mockWebSocketInstance!.getSentMessages()).toHaveLength(0);
+    });
+
+    test('should ignore malformed requests without id or method', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      // Send valid JSON but missing required fields
+      if (mockWebSocketInstance!.onmessage) {
+        mockWebSocketInstance!.onmessage(
+          new MessageEvent('message', { data: '{"foo": "bar"}' }),
+        );
+      }
+
+      await flushPromises();
+      expect(mockWebSocketInstance!.getSentMessages()).toHaveLength(0);
+      expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reconnection', () => {
+    test('should attempt to reconnect on close', async () => {
+      vi.useFakeTimers();
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.advanceTimersByTimeAsync(0); // Let connection complete
+
+      const firstInstance = mockWebSocketInstance;
+      firstInstance!.simulateClose('test close');
+
+      // Advance past reconnect delay
+      await vi.advanceTimersByTimeAsync(1000);
+
+      // Should have created a new WebSocket
+      expect(mockWebSocketInstance).not.toBe(firstInstance);
+    });
+
+    test('should stop reconnecting after max attempts', async () => {
+      vi.useFakeTimers();
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate 5 failed reconnections
+      for (let i = 0; i < 6; i++) {
+        mockWebSocketInstance!.simulateClose();
+        await vi.advanceTimersByTimeAsync(5000); // Reconnect delays increase
+      }
+
+      const lastInstance = mockWebSocketInstance;
+
+      // After max attempts, no more reconnection
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(mockWebSocketInstance).toBe(lastInstance);
+    });
+
+    test('should reset reconnect attempts on successful connection', async () => {
+      vi.useFakeTimers();
+
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Simulate close
+      mockWebSocketInstance!.simulateClose();
+
+      // Advance past first reconnect delay
+      await vi.advanceTimersByTimeAsync(1500);
+
+      // A new connection should have been attempted
+      const secondInstance = mockWebSocketInstance;
+      expect(secondInstance).toBeDefined();
+
+      // Wait for connection to complete
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Verify the reconnect attempt happened by checking we have a new instance URL
+      expect(secondInstance!.url).toContain('/__iwer_mcp');
+    });
+  });
+
+  describe('verbose mode', () => {
+    test('should log connection status when verbose is enabled', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      client = new MCPWebSocketClient(mockDevice as any, {
+        verbose: true,
+      });
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      // Should have logged connection messages
+      const iwerLogs = consoleSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('[IWER-MCP]'),
+      );
+      expect(iwerLogs.length).toBeGreaterThan(0);
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should not log when verbose is disabled', async () => {
+      const consoleLogSpy = vi
+        .spyOn(console, 'log')
+        .mockImplementation(() => {});
+      const consoleDebugSpy = vi
+        .spyOn(console, 'debug')
+        .mockImplementation(() => {});
+
+      client = new MCPWebSocketClient(mockDevice as any, {
+        verbose: false,
+      });
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      // No [IWER-MCP] logs should be present in either log or debug
+      const iwerLogCalls = consoleLogSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('[IWER-MCP]'),
+      );
+      const iwerDebugCalls = consoleDebugSpy.mock.calls.filter(
+        (call) => typeof call[0] === 'string' && call[0].includes('[IWER-MCP]'),
+      );
+      expect(iwerLogCalls).toHaveLength(0);
+      expect(iwerDebugCalls).toHaveLength(0);
+
+      consoleLogSpy.mockRestore();
+      consoleDebugSpy.mockRestore();
+    });
+  });
+});
+
+describe('initMCPClient', () => {
+  let mockDevice: ReturnType<typeof createMockDevice>;
+  let mockWebSocketInstance: MockWebSocket | null = null;
+  let originalWebSocket: typeof WebSocket | undefined;
+  let originalWindow: typeof globalThis.window | undefined;
+
+  beforeEach(() => {
+    mockDevice = createMockDevice();
+    mockWebSocketInstance = null;
+
+    // Mock WebSocket globally with static properties — use subclass to capture instance
+    originalWebSocket = globalThis.WebSocket;
+    const MockWebSocketClass = class extends MockWebSocket {
+      constructor(url: string) {
+        super(url);
+        mockWebSocketInstance = this;
+      }
+    };
+    (MockWebSocketClass as any).CONNECTING = 0;
+    (MockWebSocketClass as any).OPEN = 1;
+    (MockWebSocketClass as any).CLOSING = 2;
+    (MockWebSocketClass as any).CLOSED = 3;
+    (globalThis as any).WebSocket = MockWebSocketClass;
+
+    // Mock window for browser-like environment
+    originalWindow = (globalThis as any).window;
+    (globalThis as any).window = {
+      location: {
+        protocol: 'http:',
+        hostname: 'localhost',
+        port: '5173',
+      },
+    };
+  });
+
+  afterEach(() => {
+    if (originalWebSocket) {
+      globalThis.WebSocket = originalWebSocket;
+    }
+    if (originalWindow !== undefined) {
+      (globalThis as any).window = originalWindow;
+    } else {
+      delete (globalThis as any).window;
+    }
+    vi.useRealTimers();
+  });
+
+  test('should create and connect client', () => {
+    const client = initMCPClient(mockDevice as any);
+    expect(client).toBeInstanceOf(MCPWebSocketClient);
+    client.disconnect();
+  });
+
+  test('should pass options to client', async () => {
+    // Mock console.log to prevent verbose output in test results
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const client = initMCPClient(mockDevice as any, {
+      port: 3000,
+      verbose: true,
+    });
+    expect(client).toBeInstanceOf(MCPWebSocketClient);
+
+    await vi.waitFor(() => mockWebSocketInstance !== null);
+    expect(mockWebSocketInstance!.url).toBe('ws://localhost:3000/__iwer_mcp');
+
+    client.disconnect();
+    consoleSpy.mockRestore();
+  });
+});

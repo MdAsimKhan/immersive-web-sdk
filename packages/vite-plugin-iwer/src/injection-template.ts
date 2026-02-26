@@ -14,6 +14,8 @@ import {
   metaQuestPro,
   oculusQuest1,
 } from 'iwer';
+import { initMCPClient } from './mcp/ws-client.js';
+import { patchGetContext } from './mcp/screenshot-capture.js';
 import type { ProcessedIWEROptions } from './types.js';
 
 // Configuration will be replaced by the plugin
@@ -154,6 +156,30 @@ function injectIWER(config: ProcessedIWEROptions): void {
 
       // Use SEM's built-in CDN loading (since __IS_UMD__ is true)
       xrDevice.sem?.loadDefaultEnvironment(config.sem.defaultScene);
+    }
+
+    // Configure MCP if provided
+    if (config.mcp) {
+      // Patch getContext to force preserveDrawingBuffer before any WebGL
+      // context is created. Only applied when MCP is active to avoid the
+      // perf cost on production / non-MCP dev builds.
+      patchGetContext();
+
+      if (config.verbose) {
+        console.log('[IWER Plugin] 🔌 Initializing MCP client...');
+      }
+
+      const mcpClient = initMCPClient(xrDevice, {
+        port: config.mcp.port,
+        verbose: config.mcp.verbose || config.verbose,
+      });
+
+      // Expose MCP client for debugging
+      (window as any).IWER_MCP = mcpClient;
+
+      if (config.verbose) {
+        console.log('[IWER Plugin] ✅ MCP client initialized');
+      }
     }
 
     if (config.verbose) {
