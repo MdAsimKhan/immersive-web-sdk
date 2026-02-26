@@ -28,7 +28,9 @@ export async function promptFlow(nameArg?: string): Promise<PromptResult> {
           message: 'Project name',
           initial: 'iwsdk-app',
           validate: (v: string) =>
-            v.trim().length ? true : 'Project name is required',
+            /^[a-zA-Z0-9._@-]+$/.test(v.trim())
+              ? true
+              : 'Project name must contain only letters, numbers, hyphens, underscores, dots, and @',
         },
         { onCancel },
       )
@@ -237,23 +239,29 @@ export async function promptFlow(nameArg?: string): Promise<PromptResult> {
 
   // UI library selection removed (no-op currently)
 
-  const metaAnswer = await prompts(
-    {
-      type: 'select',
-      name: 'metaspatialChoice',
-      message: 'Enable Meta Spatial Editor integration?',
-      choices: [
-        {
-          title: 'Yes (Install Meta Spatial Editor if needed)',
-          value: true,
-        },
-        { title: 'No (Can change later)', value: false },
-      ],
-      initial: 0,
-    },
-    { onCancel },
-  );
-  const metaspatial = !!metaAnswer.metaspatialChoice;
+  // Meta Spatial Editor is only available as a GUI app on macOS/Windows.
+  // On Linux, skip the prompt and default to manual workflow.
+  const isLinux = process.platform !== 'darwin' && process.platform !== 'win32';
+  let metaspatial = false;
+  if (!isLinux) {
+    const metaAnswer = await prompts(
+      {
+        type: 'select',
+        name: 'metaspatialChoice',
+        message: 'Enable Meta Spatial Editor integration?',
+        choices: [
+          {
+            title: 'Yes (Install Meta Spatial Editor if needed)',
+            value: true,
+          },
+          { title: 'No (Can change later)', value: false },
+        ],
+        initial: 0,
+      },
+      { onCancel },
+    );
+    metaspatial = !!metaAnswer.metaspatialChoice;
+  }
 
   let mseInstallResult: MSEInstallResult | undefined;
 

@@ -24,9 +24,30 @@ import {
   fetchRecipesIndex,
   fetchRecipeByFileName,
 } from './recipes.js';
+import {
+  detectMSEVersion,
+  detectPlatform,
+  isVersionSufficient,
+} from './mse-installer.js';
+import { MSE_MIN_VERSION } from './mse-config.js';
 import { scaffoldProject } from './scaffold.js';
-import { PromptResult, TriState, VariantId } from './types.js';
+import { MSEInstallResult, PromptResult, TriState, VariantId } from './types.js';
 import { VERSION, NODE_ENGINE } from './version.js';
+
+type CliOptions = {
+  yes?: boolean;
+  assetsBase?: string;
+  mode?: 'vr' | 'ar';
+  language?: 'ts' | 'js';
+  metaspatial?: boolean;
+  install?: boolean;
+  git?: boolean;
+  locomotion?: boolean;
+  grabbing?: boolean;
+  physics?: boolean;
+  sceneUnderstanding?: boolean;
+  environmentRaycast?: boolean;
+};
 
 async function main() {
   // Enforce Node engines range from generated version.ts
@@ -65,8 +86,8 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
 
   const program = new Command();
   let nameArg: string | undefined;
-  let yes = false;
-  let assetsBaseFlag: string | undefined;
+  let cliOpts: CliOptions = {};
+
   program
     .name('Create IWSDK')
     .description('Official CLI for creating Immersive Web SDK projects')
@@ -74,36 +95,195 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     .argument('[name]', 'Project name')
     .option('--assets-base <url>', 'Override CDN base for recipes and assets')
     .option('-y, --yes', 'Use defaults and skip prompts')
-    .action((n: string | undefined, opts: any) => {
+    .option('--mode <mode>', 'Experience mode: vr or ar', 'vr')
+    .option('--language <lang>', 'Language: ts or js', 'ts')
+    .option('--metaspatial', 'Use Meta Spatial Editor workflow', false)
+    .option('--no-metaspatial', 'Use manual workflow (default)')
+    .option('--install', 'Install dependencies after scaffolding', true)
+    .option('--no-install', 'Skip dependency installation')
+    .option('--git', 'Initialize git repository', true)
+    .option('--no-git', 'Skip git initialization')
+    .option('--locomotion', 'Enable locomotion feature', true)
+    .option('--no-locomotion', 'Disable locomotion feature')
+    .option('--grabbing', 'Enable grabbing feature', true)
+    .option('--no-grabbing', 'Disable grabbing feature')
+    .option('--physics', 'Enable physics feature', false)
+    .option('--no-physics', 'Disable physics feature (default)')
+    .option('--scene-understanding', 'Enable scene understanding (AR mode)', true)
+    .option('--no-scene-understanding', 'Disable scene understanding')
+    .option('--environment-raycast', 'Enable environment raycast (AR mode)', true)
+    .option('--no-environment-raycast', 'Disable environment raycast')
+    .action((n: string | undefined, opts: CliOptions) => {
       nameArg = n;
-      yes = !!opts.yes;
-      assetsBaseFlag = opts.assetsBase;
+      cliOpts = opts;
     });
   program.parse(process.argv);
 
   try {
-    const res = yes
-      ? ({
-          name: nameArg || 'iwsdk-app',
-          id: 'vr-manual-ts' as VariantId,
-          installNow: true,
-          metaspatial: false,
-          mode: 'vr',
-          language: 'ts',
-          features: [],
-          featureFlags: {
-            locomotionEnabled: true,
-            locomotionUseWorker: true,
-            grabbingEnabled: true,
-            physicsEnabled: false,
-            sceneUnderstandingEnabled: false,
-            environmentRaycastEnabled: false,
-          },
-          gitInit: true,
-          xrFeatureStates: { handTracking: 'optional', layers: 'optional' },
-        } satisfies PromptResult)
-      : await promptFlow(nameArg);
-    const assetsBase = assetsBaseFlag || DEFAULT_ASSETS_BASE;
+    // Validate flag values
+    if (
+      cliOpts.mode !== undefined &&
+      cliOpts.mode !== 'vr' &&
+      cliOpts.mode !== 'ar'
+    ) {
+      console.error(
+        chalk.red(
+          `Invalid --mode "${cliOpts.mode}". Must be "vr" or "ar".`,
+        ),
+      );
+      process.exit(1);
+    }
+    if (
+      cliOpts.language !== undefined &&
+      cliOpts.language !== 'ts' &&
+      cliOpts.language !== 'js'
+    ) {
+      console.error(
+        chalk.red(
+          `Invalid --language "${cliOpts.language}". Must be "ts" or "js".`,
+        ),
+      );
+      process.exit(1);
+    }
+    if (cliOpts.assetsBase) {
+      try {
+        const parsed = new URL(cliOpts.assetsBase);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new Error('Protocol must be http or https');
+        }
+      } catch {
+        console.error(
+          chalk.red(
+            `Invalid --assets-base URL: "${cliOpts.assetsBase}". Must be a valid http(s) URL.`,
+          ),
+        );
+        process.exit(1);
+      }
+    }
+
+    // Warn if flags are provided without --yes (they only take effect in non-interactive mode)
+    const explicitFlags = [
+      '--mode', '--language',
+      '--metaspatial', '--no-metaspatial',
+      '--install', '--no-install',
+      '--git', '--no-git',
+      '--locomotion', '--no-locomotion',
+      '--grabbing', '--no-grabbing',
+      '--physics', '--no-physics',
+      '--scene-understanding', '--no-scene-understanding',
+      '--environment-raycast', '--no-environment-raycast',
+    ];
+    const hasExplicitFlags = process.argv.some((arg) =>
+      explicitFlags.includes(arg),
+    );
+    if (hasExplicitFlags && !cliOpts.yes) {
+      console.warn(
+        chalk.yellow(
+          'Warning: CLI flags (--mode, --language, etc.) only take effect with -y/--yes.\n' +
+            'Add -y to use non-interactive mode, or remove flags for interactive prompts.',
+        ),
+      );
+    }
+
+    // Build PromptResult from CLI flags or interactive prompts
+    let res: PromptResult;
+    if (cliOpts.yes) {
+      const mode = (cliOpts.mode || 'vr') as 'vr' | 'ar';
+      const language = (cliOpts.language || 'ts') as 'ts' | 'js';
+      const metaspatial = cliOpts.metaspatial ?? false;
+
+      // Meta Spatial Editor is only available as a GUI app on macOS/Windows.
+      // The Linux CLI can build metaspatial projects but cannot author content.
+      if (metaspatial && detectPlatform() === 'linux') {
+        throw new Error(
+          'Meta Spatial Editor is not available on Linux.\n' +
+            'The metaspatial workflow requires macOS or Windows to author content.\n' +
+            'The Linux CLI (MetaSpatialEditorCLI) is for CI/CD builds only.',
+        );
+      }
+
+      const workflow = metaspatial ? 'metaspatial' : 'manual';
+      const variantId = `${mode}-${workflow}-${language}` as VariantId;
+
+      const locomotionEnabled =
+        mode === 'vr' ? (cliOpts.locomotion ?? true) : false;
+
+      // MSE detection for scripted mode (no auto-install — requires TOS consent)
+      let mseInstallResult: MSEInstallResult | undefined;
+      if (metaspatial) {
+        const platform = detectPlatform();
+        const existingVersion = await detectMSEVersion(platform);
+        if (existingVersion && isVersionSufficient(existingVersion)) {
+          mseInstallResult = {
+            installed: true,
+            version: existingVersion,
+            manual: false,
+          };
+        } else if (existingVersion) {
+          throw new Error(
+            `Meta Spatial Editor ${existingVersion} is installed but version ${MSE_MIN_VERSION}+ is required.\n` +
+              'Please upgrade manually, or run without --yes to upgrade interactively.\n' +
+              'Download: https://developers.meta.com/horizon/documentation/spatial-sdk/spatial-editor-overview',
+          );
+        } else {
+          throw new Error(
+            'Meta Spatial Editor is required for --metaspatial but is not installed.\n' +
+              'Installation requires accepting the Terms of Service and cannot be automated with --yes.\n' +
+              'Run without --yes to install interactively, or install manually:\n' +
+              'https://developers.meta.com/horizon/documentation/spatial-sdk/spatial-editor-overview',
+          );
+        }
+      }
+
+      res = {
+        name: nameArg || 'iwsdk-app',
+        id: variantId,
+        installNow: cliOpts.install ?? true,
+        metaspatial,
+        mode,
+        language,
+        features: [],
+        featureFlags: {
+          locomotionEnabled,
+          locomotionUseWorker: locomotionEnabled ? true : undefined,
+          grabbingEnabled: cliOpts.grabbing ?? true,
+          physicsEnabled: cliOpts.physics ?? false,
+          sceneUnderstandingEnabled:
+            mode === 'ar'
+              ? (cliOpts.sceneUnderstanding ?? true)
+              : false,
+          environmentRaycastEnabled:
+            mode === 'ar'
+              ? (cliOpts.environmentRaycast ?? true)
+              : false,
+        },
+        gitInit: cliOpts.git ?? true,
+        xrFeatureStates:
+          mode === 'ar'
+            ? {
+                handTracking: 'optional',
+                anchors: 'optional',
+                hitTest: 'optional',
+                planeDetection: 'optional',
+                meshDetection: 'optional',
+                layers: 'optional',
+              }
+            : { handTracking: 'optional', layers: 'optional' },
+        mseInstallResult,
+      };
+    } else {
+      res = await promptFlow(nameArg);
+    }
+
+    // Validate project name (both interactive and non-interactive paths)
+    if (!/^[a-zA-Z0-9._@-]+$/.test(res.name)) {
+      throw new Error(
+        `Invalid project name "${res.name}". ` +
+          'Use only letters, numbers, hyphens, underscores, dots, and @.',
+      );
+    }
+
+    const assetsBase = cliOpts.assetsBase || DEFAULT_ASSETS_BASE;
     // Fetch Chef recipes index and the chosen recipe (no local fallback)
     const index = await fetchRecipesIndex(assetsBase);
     const found = index.find((r) => r.id === res.id);
@@ -151,6 +331,17 @@ IWSDK Create CLI v${VERSION}\nNode ${process.version}`;
     const xrLiteral = `{ ${entries.join(', ')} }`;
     recipe.edits['@xrFeaturesStr'] = xrLiteral;
     const outDir = join(process.cwd(), res.name);
+
+    // Check if target directory already exists and is non-empty
+    if (
+      fs.existsSync(outDir) &&
+      fs.readdirSync(outDir).length > 0
+    ) {
+      throw new Error(
+        `Directory "${res.name}" already exists and is not empty. ` +
+          'Please choose a different name or remove the existing directory.',
+      );
+    }
 
     await scaffoldProject(recipe, outDir);
 
