@@ -218,10 +218,12 @@ World.create(document.getElementById('scene-container'), {
   // Register the depth sensing system with occlusion enabled
   world
     .registerSystem(DepthSensingSystem, {
-      enableDepthTexture: true,
-      enableOcclusion: true,
-      useFloat32: true,
-      blurRadius: 20.0,
+      configData: {
+        enableDepthTexture: true,
+        enableOcclusion: true,
+        useFloat32: true,
+        blurRadius: 20.0,
+      },
     })
     .registerComponent(DepthOccludable);
 
