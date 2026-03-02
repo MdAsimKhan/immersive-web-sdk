@@ -4,5 +4,7 @@
     "./components/"
   ],
   "spatial.editor.libraryComponentXmlsPath": "../build/generated/components",
-  "spatial.editor.useExtendedXmlsWhenBuiltInXmlsAreUsed": true
+  "spatial.editor.useExtendedXmlsWhenBuiltInXmlsAreUsed": true,
+  "spatial.editor.componentAssetsPath": "../public/",
+  "spatial.editor.componentAssetsPathExportOverride": "."
 }
