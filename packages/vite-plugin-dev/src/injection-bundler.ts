@@ -38,7 +38,7 @@ export async function buildInjectionBundle(
           : options.activation,
       verbose: options.verbose,
       sem: options.sem || null,
-      mcp: options.mcp || null,
+      ai: options.ai || null,
       userAgentException:
         options.userAgentException instanceof RegExp
           ? `/${options.userAgentException.source}/`

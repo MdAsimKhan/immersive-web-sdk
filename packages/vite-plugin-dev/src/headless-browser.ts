@@ -109,6 +109,10 @@ export interface ManagedBrowser {
   queryLogs(options?: LogQuery): CapturedLog[];
   /** Take a screenshot of the browser page via CDP. */
   screenshot(): Promise<Buffer>;
+  /** Register a callback invoked when the page/browser closes unexpectedly. */
+  onClose(callback: () => void): void;
+  /** Whether the underlying Playwright page has been closed. */
+  isClosed(): boolean;
 }
 
 export async function launchManagedBrowser(
@@ -206,8 +210,24 @@ export async function launchManagedBrowser(
     );
   }
 
+  // Track intentional vs unexpected closure
+  let intentionalClose = false;
+  let closeCallback: (() => void) | null = null;
+  let closeFired = false;
+
+  const fireCloseCallback = () => {
+    if (!intentionalClose && closeCallback && !closeFired) {
+      closeFired = true;
+      closeCallback();
+    }
+  };
+
+  page.on('close', fireCloseCallback);
+  browser.on('disconnected', fireCloseCallback);
+
   return {
     close: async () => {
+      intentionalClose = true;
       try {
         await context.close();
       } finally {
@@ -217,5 +237,9 @@ export async function launchManagedBrowser(
     page,
     queryLogs: (options?: LogQuery) => consoleCapture.query(options),
     screenshot: () => page.screenshot({ type: 'png' }),
+    onClose: (callback: () => void) => {
+      closeCallback = callback;
+    },
+    isClosed: () => (page as any).isClosed(),
   };
 }

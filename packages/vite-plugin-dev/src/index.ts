@@ -305,18 +305,19 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
     };
   }
 
-  // Process AI/MCP options - enabled by default unless explicitly disabled
+  // Process AI options - enabled by default unless explicitly disabled
   const aiOption = options.ai ?? true;
   if (aiOption) {
     if (typeof aiOption === 'boolean') {
-      processed.mcp = {
+      processed.ai = {
         verbose: false,
         tools: ['claude', 'cursor', 'copilot', 'codex'],
         headless: false,
         viewport: { width: 800, height: 800 },
+        devUI: true,
       };
     } else {
-      processed.mcp = {
+      processed.ai = {
         port: aiOption.port,
         verbose: aiOption.verbose ?? false,
         tools: aiOption.tools ?? ['claude', 'cursor', 'copilot', 'codex'],
@@ -325,6 +326,7 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
           width: aiOption.viewport?.width ?? 800,
           height: aiOption.viewport?.height ?? 800,
         },
+        devUI: aiOption.devUI ?? true,
       };
     }
   }
@@ -352,7 +354,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // Suppress Vite's auto-open — Playwright manages the browser tab.
       // Mutate userConfig directly since plugin return values have lower
       // precedence and would be overridden by the user's `open: true`.
-      if (pluginOptions.mcp) {
+      if (pluginOptions.ai) {
         if (userConfig.server) {
           userConfig.server.open = false;
         } else {
@@ -370,7 +372,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         console.log(
           `  - SEM: ${pluginOptions.sem ? 'enabled (' + pluginOptions.sem.defaultScene + ')' : 'disabled'}`,
         );
-        console.log(`  - MCP: ${pluginOptions.mcp ? 'enabled' : 'disabled'}`);
+        console.log(`  - AI: ${pluginOptions.ai ? 'enabled' : 'disabled'}`);
         console.log(`  - Activation: ${pluginOptions.activation}`);
         if (pluginOptions.userAgentException) {
           console.log('  - UA exception: enabled');
@@ -380,9 +382,80 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     },
 
     configureServer(server: ViteDevServer) {
-      if (!pluginOptions.mcp) {
+      if (!pluginOptions.ai) {
         return;
       }
+
+      // Closure-scoped state for browser auto-recovery
+      let browserLaunchPromise: Promise<void> | null = null;
+      let serverShuttingDown = false;
+      let browserUrl = '';
+      let browserHeadless = false;
+      let browserViewport = { width: 800, height: 800 };
+      let consecutiveFailures = 0;
+      const MAX_LAUNCH_FAILURES = 3;
+
+      /**
+       * Launch (or re-launch) the Playwright-managed browser.
+       * Guards against concurrent launches via `browserLaunchPromise`.
+       * Stops retrying after MAX_LAUNCH_FAILURES consecutive failures.
+       */
+      const launchBrowser = (): Promise<void> => {
+        if (browserLaunchPromise) {
+          return browserLaunchPromise;
+        }
+
+        browserLaunchPromise = (async () => {
+          try {
+            const browser = await launchManagedBrowser(
+              browserUrl,
+              browserHeadless,
+              pluginOptions.verbose,
+              browserViewport,
+            );
+            managedBrowser = browser;
+            consecutiveFailures = 0;
+
+            // Re-launch on unexpected close (user closed the window, crash, etc.)
+            browser.onClose(() => {
+              managedBrowser = null;
+              if (!serverShuttingDown) {
+                console.log('🔄 IWSDK: Browser closed unexpectedly, re-launching...');
+                launchBrowser();
+              }
+            });
+          } catch (error) {
+            consecutiveFailures++;
+            console.error('❌ IWSDK: Failed to launch browser:', error);
+            if (consecutiveFailures >= MAX_LAUNCH_FAILURES) {
+              console.error(
+                `❌ IWSDK: ${MAX_LAUNCH_FAILURES} consecutive launch failures, giving up. ` +
+                'Restart the dev server to retry.',
+              );
+            }
+          } finally {
+            browserLaunchPromise = null;
+          }
+        })();
+
+        return browserLaunchPromise;
+      };
+
+      /**
+       * Return the current managed browser, re-launching if it was closed.
+       * Returns null if the browser cannot be launched.
+       */
+      const ensureBrowser = async (): Promise<ManagedBrowser | null> => {
+        if (managedBrowser && !managedBrowser.isClosed()) {
+          return managedBrowser;
+        }
+        managedBrowser = null;
+        if (consecutiveFailures >= MAX_LAUNCH_FAILURES) {
+          return null;
+        }
+        await launchBrowser();
+        return managedBrowser;
+      };
 
       // Initialize WebSocket server and client tracking
       mcpClients = new Set();
@@ -390,7 +463,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
       // First-response-wins relay handler (extracted for testability)
       const relay = createRelayHandler({
-        verbose: pluginOptions.mcp?.verbose,
+        verbose: pluginOptions.ai?.verbose,
       });
 
       // Clean up stale entries every 60 seconds
@@ -402,13 +475,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       mcpWss.on('connection', (ws: WebSocket) => {
         mcpClients!.add(ws);
 
-        if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
+        if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
           console.log('[IWSDK-MCP] Client connected');
         }
 
         ws.on('message', async (data: Buffer) => {
           const message = data.toString();
-          if (pluginOptions.mcp?.verbose) {
+          if (pluginOptions.ai?.verbose) {
             console.log(
               '[IWSDK-MCP] Message received:',
               message.substring(0, 100),
@@ -428,7 +501,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
               if (!params.level) {
                 params.level = ['log', 'info', 'warn', 'error'];
               }
-              const result = managedBrowser ? managedBrowser.queryLogs(params) : [];
+              const browser = await ensureBrowser();
+              const result = browser ? browser.queryLogs(params) : [];
               ws.send(JSON.stringify({ id: parsed.id, result }));
             }
 
@@ -436,8 +510,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             if (!intercepted && parsed.method === 'screenshot' && parsed.id) {
               intercepted = true;
               try {
-                if (managedBrowser) {
-                  const buffer = await managedBrowser.screenshot();
+                const browser = await ensureBrowser();
+                if (browser) {
+                  const buffer = await browser.screenshot();
                   const base64 = buffer.toString('base64');
                   ws.send(JSON.stringify({
                     id: parsed.id,
@@ -467,13 +542,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
         ws.on('close', () => {
           mcpClients!.delete(ws);
-          if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
+          if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
             console.log('[IWSDK-MCP] Client disconnected');
           }
         });
 
         ws.on('error', (error) => {
-          if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
+          if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
             console.error('[IWSDK-MCP] WebSocket error:', error);
           }
         });
@@ -485,7 +560,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           return;
         }
 
-        if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
+        if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
           console.log('[IWSDK-MCP] WebSocket upgrade request received');
         }
 
@@ -551,7 +626,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         managedServerKeys.length = 0;
         managedServerKeys.push(...Object.keys(serverEntries));
 
-        const tools = pluginOptions.mcp!.tools;
+        const tools = pluginOptions.ai!.tools;
         const writes: Promise<void>[] = [];
 
         for (const tool of tools) {
@@ -606,20 +681,16 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
         // Launch Playwright-managed browser
         const protocol = server.config.server.https ? 'https' : 'http';
-        const url = `${protocol}://localhost:${actualPort}`;
-        const headless = pluginOptions.mcp?.headless ?? false;
-        const viewport = pluginOptions.mcp?.viewport ?? { width: 800, height: 800 };
-        launchManagedBrowser(url, headless, pluginOptions.verbose, viewport)
-          .then((browser) => {
-            managedBrowser = browser;
-          })
-          .catch((error) => {
-            console.error('❌ IWSDK: Failed to launch browser:', error);
-          });
+        browserUrl = `${protocol}://localhost:${actualPort}`;
+        browserHeadless = pluginOptions.ai?.headless ?? false;
+        browserViewport = pluginOptions.ai?.viewport ?? { width: 800, height: 800 };
+        launchBrowser();
       });
 
       // Clean up WebSocket server and MCP config files when Vite server closes
       server.httpServer?.on('close', () => {
+        serverShuttingDown = true;
+
         if (mcpWss) {
           for (const client of mcpClients || []) {
             client.close();
@@ -642,7 +713,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           }
 
           // Remove our managed entries from all configured MCP config files
-          const tools = pluginOptions.mcp!.tools;
+          const tools = pluginOptions.ai!.tools;
           const cleanups: Promise<void>[] = [];
 
           for (const tool of tools) {
@@ -775,7 +846,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             );
           }
 
-          if (pluginOptions.mcp) {
+          if (pluginOptions.ai) {
             console.log('  - AI: enabled (WebSocket at /__iwer_mcp)');
           }
 

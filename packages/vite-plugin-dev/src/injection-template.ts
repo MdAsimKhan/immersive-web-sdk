@@ -133,9 +133,9 @@ function initDevRuntime(config: ProcessedDevOptions): void {
     }
     xrDevice.installRuntime();
 
-    // Skip DevUI when MCP is active — Playwright manages the browser,
-    // so the DevUI overlay is not interactive and can interfere with rendering.
-    if (!config.mcp) {
+    // Install DevUI unless explicitly disabled via ai.devUI option.
+    // When ai is not configured, DevUI always shows.
+    if (!config.ai || config.ai.devUI) {
       xrDevice.installDevUI(DevUI);
     }
 
@@ -164,14 +164,14 @@ function initDevRuntime(config: ProcessedDevOptions): void {
 
     // Initialize MCP client only in the Playwright-managed tab.
     // Manual browser tabs get IWER + DevUI but are not remote-controlled.
-    if (config.mcp && (window as any).__IWER_MCP_MANAGED) {
+    if (config.ai && (window as any).__IWER_MCP_MANAGED) {
       if (config.verbose) {
         console.log('[IWSDK Dev] 🔌 Initializing MCP client...');
       }
 
       const mcpClient = initMCPClient(xrDevice, {
-        port: config.mcp.port,
-        verbose: config.mcp.verbose || config.verbose,
+        port: config.ai.port,
+        verbose: config.ai.verbose || config.verbose,
       });
 
       // Expose MCP client for debugging

@@ -61,8 +61,15 @@ temp/
 
 # Development tools
 .aider.conf.yml
-.claude/
-.claude/
+# Claude Code: un-ignore root .claude/ (overrides parent repo's blanket ignore)
+# Track shared config (settings.json, agents/, skills/) but not personal files.
+!.claude/
+.claude/settings.local.json
+.claude/**/.DS_Store
+.claude/**/*.local.*
+# Example/package .claude dirs are local-only — don't track
+examples/**/.claude/
+packages/**/.claude/
 .codex/
 .cursor/
 .mcp.json

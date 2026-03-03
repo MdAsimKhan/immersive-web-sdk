@@ -61,6 +61,13 @@ export interface AiOptions {
    * @default { width: 800, height: 800 }
    */
   viewport?: { width?: number; height?: number };
+
+  /**
+   * Show the IWER DevUI overlay in the Playwright-managed browser window.
+   * Useful for manual debugging alongside the AI agent.
+   * @default true
+   */
+  devUI?: boolean;
 }
 
 /** @deprecated Use `AiOptions` instead */
@@ -146,12 +153,13 @@ export interface ProcessedDevOptions {
   sem?: {
     defaultScene: string;
   };
-  mcp?: {
+  ai?: {
     port?: number;
     verbose: boolean;
     tools: AiTool[];
     headless: boolean;
     viewport: { width: number; height: number };
+    devUI: boolean;
   };
   injectOnBuild: boolean;
   activation: 'localhost' | 'always' | RegExp;

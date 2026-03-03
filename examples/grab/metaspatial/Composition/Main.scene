@@ -47,10 +47,10 @@ entities:
       tag: Environment
     - components:
         com.iwsdk.components.DistanceGrabbable:
-          scale: false
-          movementMode: 3
           translate: false
-        com.iwsdk.components.Interactable:
+          movementMode: 3
+          scale: false
+        com.iwsdk.components.RayInteractable:
           {}
         com.meta.components.Animatable:
           {}
@@ -81,16 +81,16 @@ entities:
       tag: earth
     - components:
         com.iwsdk.components.DistanceGrabbable:
-          detachOnGrab: true
+          targetPositionOffset:
+            - 0.100000001
+            - 0
+            - 0
           targetQuaternionOffset:
             - 0
             - 120
             - 0
             - 1
-          targetPositionOffset:
-            - 0.100000001
-            - 0
-            - 0
+          detachOnGrab: true
         com.iwsdk.components.Interactable:
           {}
         com.meta.components.Animatable:
@@ -122,9 +122,9 @@ entities:
           visible: true
       tag: chichen_itza
     - components:
-        com.iwsdk.components.Interactable:
-          {}
         com.iwsdk.components.OneHandGrabbable:
+          {}
+        com.iwsdk.components.RayInteractable:
           {}
         com.meta.components.Animatable:
           {}
@@ -150,9 +150,9 @@ entities:
           visible: true
       tag: pin1
     - components:
-        com.iwsdk.components.Interactable:
-          {}
         com.iwsdk.components.OneHandGrabbable:
+          {}
+        com.iwsdk.components.RayInteractable:
           {}
         com.meta.components.Animatable:
           {}
@@ -178,9 +178,9 @@ entities:
           visible: true
       tag: pin2
     - components:
-        com.iwsdk.components.Interactable:
-          {}
         com.iwsdk.components.OneHandGrabbable:
+          {}
+        com.iwsdk.components.RayInteractable:
           {}
         com.meta.components.Animatable:
           {}
@@ -207,8 +207,8 @@ entities:
       tag: pin3
     - components:
         com.iwsdk.components.DistanceGrabbable:
-          movementMode: 0
           detachOnGrab: true
+          movementMode: 0
         com.iwsdk.components.Interactable:
           {}
         com.meta.components.Animatable:
@@ -274,17 +274,17 @@ entities:
       tag: opera_house
     - components:
         com.iwsdk.components.DistanceGrabbable:
+          targetPositionOffset:
+            - 0
+            - 0.300000012
+            - 0
+          moveSpeedFactor: 0.5
           targetQuaternionOffset:
             - 12
             - 0
             - 0
             - 1
-          moveSpeedFactor: 0.5
-          targetPositionOffset:
-            - 0
-            - 0.300000012
-            - 0
-        com.iwsdk.components.Interactable:
+        com.iwsdk.components.RayInteractable:
           {}
         com.meta.components.Animatable:
           {}
@@ -310,7 +310,7 @@ entities:
           visible: true
       tag: pyramid
     - components:
-        com.iwsdk.components.Interactable:
+        com.iwsdk.components.RayInteractable:
           {}
         com.iwsdk.components.TwoHandsGrabbable:
           {}
