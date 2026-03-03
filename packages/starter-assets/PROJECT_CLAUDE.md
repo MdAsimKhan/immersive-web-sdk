@@ -312,46 +312,46 @@ Semantic code search and API lookup for IWSDK, elics ECS, and dependencies.
 
 ### IWER (Immersive Web Emulation Runtime)
 
-WebXR emulator control for testing without a headset. All tools are prefixed `mcp__iwer__`.
+WebXR emulator control for testing without a headset. All tools are prefixed `mcp__iwsdk-dev-mcp__`.
 
 **Session**
 
-| Tool                 | Purpose                                 |
-| -------------------- | --------------------------------------- |
-| `get_session_status` | Check IWER connection (**call first!**) |
-| `accept_session`     | Enter XR mode                           |
-| `end_session`        | Exit XR mode                            |
-| `reload_page`        | Reload browser to reset state           |
+| Tool                       | Purpose                                 |
+| -------------------------- | --------------------------------------- |
+| `xr_get_session_status`    | Check IWER connection (**call first!**) |
+| `xr_accept_session`        | Enter XR mode                           |
+| `xr_end_session`           | Exit XR mode                            |
+| `browser_reload_page`      | Reload browser to reset state           |
 
 **Device Control**
 
-| Tool                | Purpose                                                                    |
-| ------------------- | -------------------------------------------------------------------------- |
-| `set_transform`     | Set position/orientation of headset, controller, or hand                   |
-| `get_transform`     | Read current position/orientation of a device                              |
-| `look_at`           | Orient a device toward a world position (optional move-to)                 |
-| `animate_to`        | Smoothly animate a device to a new transform over time                     |
-| `set_input_mode`    | Switch between `controller` and `hand` tracking                            |
-| `set_connected`     | Connect/disconnect an input device                                         |
-| `select`            | Full select action (press+release) — fires selectstart/select/selectend    |
-| `set_select_value`  | Set trigger/pinch value (0-1) for grab-move-release patterns               |
-| `set_gamepad_state` | Set button values and thumbstick axes by index                             |
-| `get_device_state`  | Read full device state (headset + controllers + hands)                     |
-| `set_device_state`  | Batch-set device state; call with no args to reset defaults                |
+| Tool                  | Purpose                                                                    |
+| --------------------- | -------------------------------------------------------------------------- |
+| `xr_set_transform`    | Set position/orientation of headset, controller, or hand                   |
+| `xr_get_transform`    | Read current position/orientation of a device                              |
+| `xr_look_at`          | Orient a device toward a world position (optional move-to)                 |
+| `xr_animate_to`       | Smoothly animate a device to a new transform over time                     |
+| `xr_set_input_mode`   | Switch between `controller` and `hand` tracking                            |
+| `xr_set_connected`    | Connect/disconnect an input device                                         |
+| `xr_select`           | Full select action (press+release) — fires selectstart/select/selectend    |
+| `xr_set_select_value` | Set trigger/pinch value (0-1) for grab-move-release patterns               |
+| `xr_set_gamepad_state`| Set button values and thumbstick axes by index                             |
+| `xr_get_device_state` | Read full device state (headset + controllers + hands)                     |
+| `xr_set_device_state` | Batch-set device state; call with no args to reset defaults                |
 
 **Observation**
 
-| Tool               | Purpose                                                 |
-| ------------------ | ------------------------------------------------------- |
-| `capture_canvas`   | Screenshot the WebXR canvas (returns file path)         |
-| `get_console_logs` | Browser console logs with level/pattern/count filtering |
+| Tool                      | Purpose                                                 |
+| ------------------------- | ------------------------------------------------------- |
+| `browser_screenshot`      | Screenshot the browser (returns image inline)           |
+| `browser_get_console_logs`| Browser console logs with level/pattern/count filtering |
 
 **Scene Inspection** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
 
-| Tool                   | Purpose                                                                                       |
-| ---------------------- | --------------------------------------------------------------------------------------------- |
-| `get_scene_hierarchy`  | Three.js scene tree with names, UUIDs, and entity indices                                     |
-| `get_object_transform` | Local + global transforms; includes position relative to XR origin (use with `look_at`) |
+| Tool                         | Purpose                                                                                       |
+| ---------------------------- | --------------------------------------------------------------------------------------------- |
+| `scene_get_hierarchy`        | Three.js scene tree with names, UUIDs, and entity indices                                     |
+| `scene_get_object_transform` | Local + global transforms; includes position relative to XR origin (use with `xr_look_at`) |
 
 **ECS Debugging** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
 
@@ -376,12 +376,12 @@ WebXR emulator control for testing without a headset. All tools are prefixed `mc
 - **Frame-by-frame debugging:** `ecs_pause` → `ecs_step` (count/delta). Must pause before stepping.
 - **Diff state changes:** `ecs_snapshot(label="before")` → trigger action → `ecs_snapshot(label="after")` → `ecs_diff(from="before", to="after")`
 - **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system` to pause one system while others run
-- **Look at an object:** `get_scene_hierarchy` → find UUID → `get_object_transform` → use `positionRelativeToXROrigin` with `look_at`
+- **Look at an object:** `scene_get_hierarchy` → find UUID → `scene_get_object_transform` → use `positionRelativeToXROrigin` with `xr_look_at`
 
 **Connection check — always call first:**
 
 ```
-mcp__iwer__get_session_status
+mcp__iwsdk-dev-mcp__xr_get_session_status
 ```
 
 If this returns a successful connection, the dev server is ALREADY running. Do NOT start another one.
@@ -390,7 +390,7 @@ If this returns a successful connection, the dev server is ALREADY running. Do N
 
 - Dev server not running → Start with `npm run dev`
 - Browser tab in background → Bring to foreground (Chrome throttles background tabs)
-- Session not active → Use `mcp__iwer__accept_session`
+- Session not active → Use `mcp__iwsdk-dev-mcp__xr_accept_session`
 
 ---
 
@@ -631,26 +631,26 @@ Type errors will prevent systems from initializing properly, but may not show er
 **BEFORE starting a dev server, ALWAYS check if one is already running:**
 
 ```
-mcp__iwer__get_session_status
+mcp__iwsdk-dev-mcp__xr_get_session_status
 ```
 
 If this returns a successful connection, the dev server is already running. Do NOT start another one.
 
 1. **Type check first:** `npx tsc --noEmit` - fix any errors before proceeding
-2. Check IWER status first: `mcp__iwer__get_session_status`
+2. Check IWER status first: `mcp__iwsdk-dev-mcp__xr_get_session_status`
 3. If not connected, start dev server: `npm run dev`
 4. Open browser to `https://localhost:8081`
-5. Enter XR: `mcp__iwer__accept_session`
+5. Enter XR: `mcp__iwsdk-dev-mcp__xr_accept_session`
 6. Test interactions with controller tools
 
 ### Debugging Missing Features
 
 If something isn't appearing or working but no errors show in console:
 
-1. **Don't use level filter for console logs** — call `mcp__iwer__get_console_logs` with just `count`, not `level` filter, as you may miss important errors
+1. **Don't use level filter for console logs** — call `mcp__iwsdk-dev-mcp__browser_get_console_logs` with just `count`, not `level` filter, as you may miss important errors
 2. **Run type check** — `npx tsc --noEmit` often reveals issues that don't appear as runtime errors
-3. **Check scene hierarchy** — use `mcp__iwer__get_scene_hierarchy` to verify entities exist and find entity indices
+3. **Check scene hierarchy** — use `mcp__iwsdk-dev-mcp__scene_get_hierarchy` to verify entities exist and find entity indices
 4. **Reload and check logs immediately** — some errors only appear during initialization
-5. **Inspect ECS state** — use `mcp__iwer__ecs_find_entities` to check if entities have expected components, then `mcp__iwer__ecs_query_entity` to read their values
-6. **Diff before/after** — take `mcp__iwer__ecs_snapshot` before and after an action to see exactly what changed (or didn't)
-7. **Isolate systems** — use `mcp__iwer__ecs_toggle_system` to pause suspect systems one at a time to find which causes the issue
+5. **Inspect ECS state** — use `mcp__iwsdk-dev-mcp__ecs_find_entities` to check if entities have expected components, then `mcp__iwsdk-dev-mcp__ecs_query_entity` to read their values
+6. **Diff before/after** — take `mcp__iwsdk-dev-mcp__ecs_snapshot` before and after an action to see exactly what changed (or didn't)
+7. **Isolate systems** — use `mcp__iwsdk-dev-mcp__ecs_toggle_system` to pause suspect systems one at a time to find which causes the issue

@@ -70,20 +70,19 @@ world.createTransformEntity(previewMesh)
 
 ### Step 4: Verify with IWER Screenshots
 
-1. Check IWER connection: `mcp__iwer__get_session_status`
-2. Reload page: `mcp__iwer__reload_page`
+1. Check IWER connection: `mcp__iwsdk-dev-mcp__xr_get_session_status`
+2. Reload page: `mcp__iwsdk-dev-mcp__browser_reload_page`
 3. Wait for reload: `sleep 3`
-4. Accept XR session: `mcp__iwer__accept_session`
+4. Accept XR session: `mcp__iwsdk-dev-mcp__xr_accept_session`
 5. Position headset to look at model:
 ```
-mcp__iwer__look_at({
+mcp__iwsdk-dev-mcp__xr_look_at({
   device: "headset",
   target: { x: 0, y: 0.85, z: -1.5 },
   moveToDistance: 0.8
 })
 ```
-6. Take screenshot: `mcp__iwer__capture_canvas`
-7. Read screenshot image to verify
+6. Take screenshot: `mcp__iwsdk-dev-mcp__browser_screenshot`
 
 ### Step 5: Report Results
 
