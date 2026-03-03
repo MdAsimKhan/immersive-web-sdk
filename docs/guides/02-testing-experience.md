@@ -110,12 +110,13 @@ Learn more about IWER at [meta-quest.github.io/immersive-web-emulation-runtime/]
 
 ### How IWER Integration Works
 
-IWER is automatically injected into your project through the `injectIWER` Vite plugin in your `vite.config.ts`:
+IWER is automatically injected into your project through the `iwsdkDev` Vite plugin in your `vite.config.ts`:
 
 ```typescript
-injectIWER({
-  device: 'metaQuest3',
-  activation: 'localhost',
+iwsdkDev({
+  emulator: {
+    device: 'metaQuest3',
+  },
   verbose: true,
 });
 ```

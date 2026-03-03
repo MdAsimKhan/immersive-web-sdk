@@ -1,12 +1,12 @@
 {
-  "name": "@iwsdk/vite-plugin-iwer",
+  "name": "@iwsdk/vite-plugin-dev",
   "version": "0.2.2",
   "type": "module",
-  "description": "Vite plugin for WebXR emulation runtime injection using IWER",
+  "description": "Vite plugin for IWSDK development — XR emulation, AI agent tooling, and Playwright browser",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "iwer-mcp": "./dist/mcp-server.js"
+    "iwsdk-dev-mcp": "./dist/mcp-server.js"
   },
   "files": [
     "dist",
@@ -26,7 +26,8 @@
     "plugin",
     "webxr",
     "emulation",
-    "iwer",
+    "iwsdk",
+    "ai",
     "polyfill",
     "meta",
     "quest",
@@ -39,11 +40,12 @@
     "@iwer/sem": "^0.2.5",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "iwer": "^2.2.0",
+    "playwright": "^1.58.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.13",
-    "vitest": "^2.1.0"
+    "vitest": "^4.0.0"
   },
   "peerDependencies": {
     "vite": "^7.0.0"

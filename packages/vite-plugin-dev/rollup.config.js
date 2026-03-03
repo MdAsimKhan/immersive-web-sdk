@@ -38,6 +38,9 @@ const pluginConfig = {
     '@iwer/devui',
     '@iwer/sem',
     'ws',
+    'playwright',
+    'os',
+    'module',
   ],
   plugins: [
     nodeResolve({

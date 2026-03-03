@@ -5,9 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { writeFile, mkdir } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join } from 'path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -27,7 +24,7 @@ for (let i = 0; i < args.length; i++) {
     if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535) {
       port = parsedPort;
     } else {
-      console.error(`[IWER-MCP] Invalid port: ${args[i + 1]}, using default ${port}`);
+      console.error(`[IWSDK-MCP] Invalid port: ${args[i + 1]}, using default ${port}`);
     }
     i++;
   } else if (args[i] === '--verbose') {
@@ -439,29 +436,15 @@ export const TOOLS = [
   },
 
   // =============================================================================
-  // Canvas Capture
+  // Screenshot
   // =============================================================================
   {
-    name: 'capture_canvas',
+    name: 'screenshot',
     description:
-      'Capture a screenshot of the WebXR canvas. Returns the path to the saved image file.',
+      'Capture a screenshot of the browser. Returns the image directly.',
     inputSchema: {
       type: 'object',
-      properties: {
-        maxWidth: {
-          type: 'number',
-          description: 'Maximum width of the captured image (default: 800)',
-        },
-        format: {
-          type: 'string',
-          enum: ['png', 'jpeg', 'webp'],
-          description: 'Image format (default: png)',
-        },
-        quality: {
-          type: 'number',
-          description: 'Image quality for jpeg/webp (0-1, default: 0.92)',
-        },
-      },
+      properties: {},
     },
   },
 
@@ -654,14 +637,14 @@ export const TOOLS = [
   {
     name: 'get_object_transform',
     description:
-      'Get local and global transforms of an Object3D. Includes positionRelativeToXROrigin which can be used directly with IWER look_at tool. Requires IWSDK or a framework that provides FRAMEWORK_MCP_RUNTIME.',
+      'Get local and global transforms of an Object3D. Includes positionRelativeToXROrigin which can be used directly with xr_look_at tool. Requires IWSDK or a framework that provides FRAMEWORK_MCP_RUNTIME.',
     inputSchema: {
       type: 'object',
       properties: {
         uuid: {
           type: 'string',
           description:
-            'UUID of the Object3D (get this from get_scene_hierarchy)',
+            'UUID of the Object3D (get this from scene_get_hierarchy)',
         },
       },
       required: ['uuid'],
@@ -711,14 +694,14 @@ export const TOOLS = [
   {
     name: 'ecs_query_entity',
     description:
-      'Get all component data for an entity. Use entityIndex from get_scene_hierarchy or ecs_find_entities. Returns serialized component values including vectors, entity refs, and Object3D references. Requires FRAMEWORK_MCP_RUNTIME.',
+      'Get all component data for an entity. Use entityIndex from scene_get_hierarchy or ecs_find_entities. Returns serialized component values including vectors, entity refs, and Object3D references. Requires FRAMEWORK_MCP_RUNTIME.',
     inputSchema: {
       type: 'object',
       properties: {
         entityIndex: {
           type: 'number',
           description:
-            'Entity index (get this from get_scene_hierarchy or ecs_find_entities)',
+            'Entity index (get this from scene_get_hierarchy or ecs_find_entities)',
         },
         components: {
           type: 'array',
@@ -807,7 +790,7 @@ export const TOOLS = [
         entityIndex: {
           type: 'number',
           description:
-            'Entity index (from ecs_find_entities or get_scene_hierarchy)',
+            'Entity index (from ecs_find_entities or scene_get_hierarchy)',
         },
         componentId: {
           type: 'string',
@@ -945,7 +928,7 @@ function tryConnect(protocol: 'wss' | 'ws'): Promise<void> {
     const wsUrl = `${protocol}://localhost:${port}/__iwer_mcp`;
 
     if (verbose) {
-      console.error(`[IWER-MCP] Trying ${wsUrl}...`);
+      console.error(`[IWSDK-MCP] Trying ${wsUrl}...`);
     }
 
     const socket = new WebSocket(wsUrl, {
@@ -962,7 +945,7 @@ function tryConnect(protocol: 'wss' | 'ws'): Promise<void> {
       ws = socket;
       isConnected = true;
       if (verbose) {
-        console.error(`[IWER-MCP] Connected via ${protocol.toUpperCase()}`);
+        console.error(`[IWSDK-MCP] Connected via ${protocol.toUpperCase()}`);
       }
 
       socket.on('message', (data: Buffer) => {
@@ -980,7 +963,7 @@ function tryConnect(protocol: 'wss' | 'ws'): Promise<void> {
           }
         } catch (error) {
           if (verbose) {
-            console.error('[IWER-MCP] Failed to parse response:', error);
+            console.error('[IWSDK-MCP] Failed to parse response:', error);
           }
         }
       });
@@ -988,7 +971,7 @@ function tryConnect(protocol: 'wss' | 'ws'): Promise<void> {
       socket.on('close', () => {
         isConnected = false;
         if (verbose) {
-          console.error('[IWER-MCP] Disconnected');
+          console.error('[IWSDK-MCP] Disconnected');
         }
         pendingRequests.forEach((pending) => {
           clearTimeout(pending.timeoutHandle);
@@ -1004,7 +987,7 @@ function tryConnect(protocol: 'wss' | 'ws'): Promise<void> {
       clearTimeout(timeout);
       if (verbose) {
         console.error(
-          `[IWER-MCP] ${protocol.toUpperCase()} error:`,
+          `[IWSDK-MCP] ${protocol.toUpperCase()} error:`,
           error.message,
         );
       }
@@ -1019,7 +1002,7 @@ async function connectWebSocket(): Promise<void> {
     return;
   } catch {
     if (verbose) {
-      console.error('[IWER-MCP] WSS failed, trying WS...');
+      console.error('[IWSDK-MCP] WSS failed, trying WS...');
     }
   }
 
@@ -1057,7 +1040,7 @@ async function sendCommand(method: string, params: unknown): Promise<unknown> {
     };
 
     if (verbose) {
-      console.error(`[IWER-MCP] Sending: ${method}`, params);
+      console.error(`[IWSDK-MCP] Sending: ${method}`, params);
     }
 
     ws!.send(JSON.stringify(request));
@@ -1069,7 +1052,7 @@ async function main() {
 
   const server = new Server(
     {
-      name: 'iwer-mcp',
+      name: 'iwsdk',
       version: '1.0.0',
     },
     {
@@ -1095,7 +1078,7 @@ async function main() {
           content: [
             {
               type: 'text',
-              text: `Failed to connect to IWER: ${error instanceof Error ? error.message : String(error)}`,
+              text: `Failed to connect to IWSDK dev server: ${error instanceof Error ? error.message : String(error)}`,
             },
           ],
           isError: true,
@@ -1103,8 +1086,7 @@ async function main() {
       }
     }
 
-    // Forward the method directly - no remapping needed
-    // Tool names match RemoteControlInterface method names exactly
+    // Forward the tool call to the browser via WebSocket
     try {
       const rawResponse = (await sendCommand(name, args)) as {
         result?: unknown;
@@ -1112,45 +1094,27 @@ async function main() {
         _tabGeneration?: number;
       };
 
-      // Special handling for capture_canvas - save to file
+      // Special handling for screenshot - return inline image
       const result = rawResponse?.result ?? rawResponse;
       if (
-        name === 'capture_canvas' &&
+        name === 'screenshot' &&
         result &&
         typeof result === 'object' &&
         'imageData' in result
       ) {
-        const captureResult = result as {
+        const { imageData, mimeType } = result as {
           imageData: string;
-          width: number;
-          height: number;
-          format: string;
-          timestamp: number;
+          mimeType: string;
         };
-        const screenshotDir = join(tmpdir(), 'iwer-screenshots');
-        await mkdir(screenshotDir, { recursive: true });
-
-        const filename = `screenshot-${captureResult.timestamp}.${captureResult.format}`;
-        const filepath = join(screenshotDir, filename);
-
-        const imageBuffer = Buffer.from(captureResult.imageData, 'base64');
-        await writeFile(filepath, imageBuffer);
-
-        // Use tabTracker for tab-change detection + _tab metadata
-        const tabResult = tabTracker.processResponse({
-          result: {
-            path: filepath,
-            width: captureResult.width,
-            height: captureResult.height,
-            format: captureResult.format,
-            timestamp: captureResult.timestamp,
-            message: `Screenshot saved to ${filepath}. Use the Read tool to view the image.`,
-          },
-          _tabId: rawResponse?._tabId,
-          _tabGeneration: rawResponse?._tabGeneration,
-        });
-
-        return tabResult;
+        return {
+          content: [
+            {
+              type: 'image' as const,
+              data: imageData,
+              mimeType,
+            },
+          ],
+        };
       }
 
       // Standard tool response — use tabTracker for tab-change detection + _tab metadata
@@ -1174,7 +1138,7 @@ async function main() {
   } catch {
     if (verbose) {
       console.error(
-        '[IWER-MCP] Initial connection failed, will retry on tool use',
+        '[IWSDK-MCP] Initial connection failed, will retry on tool use',
       );
     }
   }
@@ -1183,11 +1147,11 @@ async function main() {
   await server.connect(transport);
 
   if (verbose) {
-    console.error('[IWER-MCP] MCP server started');
+    console.error('[IWSDK-MCP] MCP server started');
   }
 }
 
 main().catch((error) => {
-  console.error('[IWER-MCP] Fatal error:', error);
+  console.error('[IWSDK-MCP] Fatal error:', error);
   process.exit(1);
 });

@@ -9,7 +9,7 @@ import {
   discoverComponents,
   generateGLXF,
 } from '@iwsdk/vite-plugin-metaspatial';
-import { injectIWER } from '@iwsdk/vite-plugin-iwer';
+import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
 import { defineConfig } from 'vite';
 import mkcert from 'vite-plugin-mkcert';
@@ -20,13 +20,13 @@ export default defineConfig({
     mkcert(),
 
     // WebXR emulation runtime injection
-    injectIWER({
-      device: 'metaQuest3',
-      sem: {
-        defaultScene: 'living_room',
+    iwsdkDev({
+      emulator: {
+        device: 'metaQuest3',
+        environment: 'living_room',
+        activation: 'always',
+        injectOnBuild: true,
       },
-      activation: 'always',
-      injectOnBuild: true,
       verbose: true,
     }),
 

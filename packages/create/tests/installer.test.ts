@@ -67,7 +67,7 @@ describe('installDependenciesFromBundle', () => {
       vite: '^5.0.0',
     },
     devDependencies: {
-      '@iwsdk/vite-plugin-iwer': '^0.1.0',
+      '@iwsdk/vite-plugin-dev': '^0.1.0',
       '@iwsdk/vite-plugin-gltf-optimizer': '^0.1.0',
       '@iwsdk/vite-plugin-uikitml': '^0.1.0',
       vitest: '^2.0.0',
@@ -94,8 +94,8 @@ describe('installDependenciesFromBundle', () => {
       '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
       '@iwsdk/starter-assets':
         'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
-      '@iwsdk/vite-plugin-iwer':
-        'file:.sdk-packages/vite-plugin-iwer/iwsdk-vite-plugin-iwer.tgz',
+      '@iwsdk/vite-plugin-dev':
+        'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
       '@iwsdk/vite-plugin-gltf-optimizer':
         'file:.sdk-packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz',
       '@iwsdk/vite-plugin-uikitml':
@@ -111,8 +111,8 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.dependencies['@iwsdk/starter-assets']).toBe(
       'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
     );
-    expect(pkg.devDependencies['@iwsdk/vite-plugin-iwer']).toBe(
-      'file:.sdk-packages/vite-plugin-iwer/iwsdk-vite-plugin-iwer.tgz',
+    expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe(
+      'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
     );
     expect(pkg.devDependencies['@iwsdk/vite-plugin-gltf-optimizer']).toBe(
       'file:.sdk-packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz',
@@ -127,8 +127,8 @@ describe('installDependenciesFromBundle', () => {
       '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
       '@iwsdk/starter-assets':
         'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
-      '@iwsdk/vite-plugin-iwer':
-        'file:.sdk-packages/vite-plugin-iwer/iwsdk-vite-plugin-iwer.tgz',
+      '@iwsdk/vite-plugin-dev':
+        'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
       '@iwsdk/vite-plugin-gltf-optimizer':
         'file:.sdk-packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz',
       '@iwsdk/vite-plugin-uikitml':
@@ -191,6 +191,6 @@ describe('installDependenciesFromBundle', () => {
     // starter-assets should remain unchanged since source doesn't know it
     expect(pkg.dependencies['@iwsdk/starter-assets']).toBe('^0.1.0');
     // devDeps should also remain unchanged
-    expect(pkg.devDependencies['@iwsdk/vite-plugin-iwer']).toBe('^0.1.0');
+    expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe('^0.1.0');
   });
 });

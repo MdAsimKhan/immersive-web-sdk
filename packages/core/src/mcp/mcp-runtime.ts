@@ -42,7 +42,7 @@ type SupportedMethod = (typeof SUPPORTED_METHODS)[number];
 /**
  * MCP Runtime for IWSDK that provides framework-specific tools.
  * This is set on window.FRAMEWORK_MCP_RUNTIME during World.create()
- * for the vite-plugin-iwer to route requests to.
+ * for the vite-plugin-dev to route requests to.
  *
  * @category Runtime
  */
@@ -53,7 +53,7 @@ export class MCPRuntime {
 
   /**
    * Returns true if this runtime handles the given method.
-   * Used by vite-plugin-iwer to route requests appropriately.
+   * Used by vite-plugin-dev to route requests appropriately.
    */
   handles(method: string): boolean {
     return SUPPORTED_METHODS.includes(method as SupportedMethod);

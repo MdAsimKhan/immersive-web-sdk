@@ -15,7 +15,7 @@ describe('MCP Server Tool Schemas', () => {
   // Helper to find a tool by name
   const findTool = (name: string) => TOOLS.find((t) => t.name === name);
 
-  describe('set_transform', () => {
+  describe('xr_set_transform', () => {
     test('should define orientation as object type', () => {
       const tool = findTool('set_transform');
       expect(tool).toBeDefined();
@@ -58,7 +58,7 @@ describe('MCP Server Tool Schemas', () => {
     });
   });
 
-  describe('animate_to', () => {
+  describe('xr_animate_to', () => {
     test('should define orientation as object type', () => {
       const tool = findTool('animate_to');
       expect(tool).toBeDefined();
@@ -85,7 +85,7 @@ describe('MCP Server Tool Schemas', () => {
     });
   });
 
-  describe('set_device_state', () => {
+  describe('xr_set_device_state', () => {
     test('should define state as object type', () => {
       const tool = findTool('set_device_state');
       expect(tool).toBeDefined();
@@ -143,7 +143,7 @@ describe('MCP Server Tool Schemas', () => {
     });
   });
 
-  describe('get_console_logs', () => {
+  describe('browser_get_console_logs', () => {
     test('should document that debug is excluded by default', () => {
       const tool = findTool('get_console_logs');
       expect(tool).toBeDefined();
@@ -168,7 +168,7 @@ describe('MCP Server Tool Schemas', () => {
     });
   });
 
-  describe('reload_page', () => {
+  describe('browser_reload_page', () => {
     test('should exist with empty properties schema', () => {
       const tool = findTool('reload_page');
       expect(tool).toBeDefined();
@@ -205,7 +205,7 @@ describe('MCP Server Tool Schemas', () => {
       }
     });
 
-    test('state parameter in set_device_state should be typed as object, not string', () => {
+    test('state parameter in xr_set_device_state should be typed as object, not string', () => {
       const tool = findTool('set_device_state');
       expect(tool).toBeDefined();
 
@@ -221,7 +221,7 @@ describe('MCP Server Tool Schemas', () => {
   // =============================================================================
   // Framework-Specific Tools (IWSDK)
   // =============================================================================
-  describe('get_scene_hierarchy', () => {
+  describe('scene_get_hierarchy', () => {
     test('should exist and have correct schema', () => {
       const tool = findTool('get_scene_hierarchy');
       expect(tool).toBeDefined();
@@ -251,7 +251,7 @@ describe('MCP Server Tool Schemas', () => {
     });
   });
 
-  describe('get_object_transform', () => {
+  describe('scene_get_object_transform', () => {
     test('should exist and have correct schema', () => {
       const tool = findTool('get_object_transform');
       expect(tool).toBeDefined();
@@ -394,7 +394,7 @@ describe('MCP Server Tool Schemas', () => {
   // Gamepad Button Index Regression Tests (Fix #1)
   // =============================================================================
   describe('gamepad button indices', () => {
-    test('get_gamepad_state description contains correct button index mapping', () => {
+    test('xr_get_gamepad_state description contains correct button index mapping', () => {
       const tool = findTool('get_gamepad_state');
       expect(tool).toBeDefined();
       expect(tool!.description).toContain('0=trigger');
@@ -405,7 +405,7 @@ describe('MCP Server Tool Schemas', () => {
       expect(tool!.description).toContain('5=thumbrest');
     });
 
-    test('set_gamepad_state button index description has correct mapping (no 2=unused, no index 6)', () => {
+    test('xr_set_gamepad_state button index description has correct mapping (no 2=unused, no index 6)', () => {
       const tool = findTool('set_gamepad_state');
       expect(tool).toBeDefined();
 
@@ -425,8 +425,8 @@ describe('MCP Server Tool Schemas', () => {
   // =============================================================================
   // Select Tool Duration Regression Tests
   // =============================================================================
-  describe('select tool', () => {
-    test('select duration description says 0.15', () => {
+  describe('xr_select tool', () => {
+    test('xr_select duration description says 0.15', () => {
       const tool = findTool('select');
       expect(tool).toBeDefined();
 
@@ -561,41 +561,35 @@ describe('createTabTracker', () => {
     expect(parsed._tab).toBeDefined();
   });
 
-  test('capture_canvas-style result with _tabId includes _tab metadata', () => {
+  test('result with _tabId includes _tab metadata', () => {
     const tracker = createTabTracker();
-    // Simulate what the handler does for capture_canvas: passes a constructed
-    // result with screenshot metadata + the raw _tabId/_tabGeneration
+    // processResponse extracts _tabId/_tabGeneration and adds _tab to the result
     const result = tracker.processResponse({
       result: {
-        path: '/tmp/screenshot.png',
-        width: 800,
-        height: 600,
-        format: 'png',
-        timestamp: 1234567890,
-        message: 'Screenshot saved',
+        someData: 'test',
       },
-      _tabId: 'tab-canvas',
+      _tabId: 'tab-abc',
       _tabGeneration: 2,
     });
 
     const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.path).toBe('/tmp/screenshot.png');
-    expect(parsed._tab).toEqual({ id: 'tab-canvas', generation: 2 });
+    expect(parsed.someData).toBe('test');
+    expect(parsed._tab).toEqual({ id: 'tab-abc', generation: 2 });
   });
 
-  test('tab change across capture_canvas calls emits WARNING', () => {
+  test('tab change across calls emits WARNING', () => {
     const tracker = createTabTracker();
 
     // First call from tab A
     tracker.processResponse({
-      result: { path: '/tmp/a.png' },
+      result: { data: 'first' },
       _tabId: 'tab-A',
       _tabGeneration: 1,
     });
 
     // Second call from tab B
     const result = tracker.processResponse({
-      result: { path: '/tmp/b.png' },
+      result: { data: 'second' },
       _tabId: 'tab-B',
       _tabGeneration: 1,
     });

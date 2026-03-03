@@ -18,7 +18,7 @@
   },
   "devDependencies": {
     "@iwsdk/vite-plugin-gltf-optimizer": "file:../../packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz",
-    "@iwsdk/vite-plugin-iwer": "file:../../packages/vite-plugin-iwer/iwsdk-vite-plugin-iwer.tgz",
+    "@iwsdk/vite-plugin-dev": "file:../../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
     "@iwsdk/vite-plugin-metaspatial": "file:../../packages/vite-plugin-metaspatial/iwsdk-vite-plugin-metaspatial.tgz",
     "@iwsdk/vite-plugin-uikitml": "file:../../packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz",
     "vite": "^7.1.4",

@@ -6,7 +6,7 @@
  */
 
 import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
-import { injectIWER } from '@iwsdk/vite-plugin-iwer';
+import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 /* @template:if kind='metaspatial' */
 import {
   discoverComponents,
@@ -20,14 +20,15 @@ import mkcert from 'vite-plugin-mkcert';
 export default defineConfig({
   plugins: [
     mkcert(),
-    injectIWER({
-      device: 'metaQuest3',
-      activation: 'localhost',
+    iwsdkDev({
+      emulator: {
+        device: 'metaQuest3',
+        /* @template:if mode='ar' */
+        environment: 'living_room',
+        /* @template:end */
+      },
+      ai: { tools: ['claude', 'cursor', 'copilot', 'codex'] /* @chef:mcp */ },
       verbose: true,
-      mcp: { tools: ['claude', 'cursor', 'copilot', 'codex'] /* @chef:mcp */ },
-      /* @template:if mode='ar' */ sem: {
-        defaultScene: 'living_room',
-      } /* @template:end */,
     }),
     /* @template:if kind='metaspatial' */
     discoverComponents({

@@ -32,7 +32,7 @@ describe('mergeJsonConfig', () => {
   test('creates file with our entries when it does not exist', async () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     const entries = {
-      iwer: { command: 'node', args: ['server.js', '--port', '8081'] },
+      'iwsdk': { command: 'node', args: ['server.js', '--port', '8081'] },
     };
 
     const created = await mergeJsonConfig(filePath, entries, 'mcpServers');
@@ -40,7 +40,7 @@ describe('mergeJsonConfig', () => {
     expect(created).toBe(true);
     const raw = await readFile(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
-    expect(parsed.mcpServers.iwer).toEqual(entries.iwer);
+    expect(parsed.mcpServers['iwsdk']).toEqual(entries['iwsdk']);
   });
 
   test('preserves user entries when file already exists', async () => {
@@ -53,7 +53,7 @@ describe('mergeJsonConfig', () => {
     await writeFile(filePath, JSON.stringify(userConfig, null, 2));
 
     const entries = {
-      iwer: { command: 'node', args: ['server.js'] },
+      'iwsdk': { command: 'node', args: ['server.js'] },
     };
 
     const created = await mergeJsonConfig(filePath, entries, 'mcpServers');
@@ -64,20 +64,20 @@ describe('mergeJsonConfig', () => {
     expect(parsed.mcpServers['my-custom-server']).toEqual(
       userConfig.mcpServers['my-custom-server'],
     );
-    expect(parsed.mcpServers.iwer).toEqual(entries.iwer);
+    expect(parsed.mcpServers['iwsdk']).toEqual(entries['iwsdk']);
   });
 
   test('updates existing managed entries in place', async () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     const initial = {
       mcpServers: {
-        iwer: { command: 'node', args: ['old-server.js'] },
+        'iwsdk': { command: 'node', args: ['old-server.js'] },
       },
     };
     await writeFile(filePath, JSON.stringify(initial, null, 2));
 
     const entries = {
-      iwer: { command: 'node', args: ['new-server.js', '--port', '9999'] },
+      'iwsdk': { command: 'node', args: ['new-server.js', '--port', '9999'] },
     };
 
     const created = await mergeJsonConfig(filePath, entries, 'mcpServers');
@@ -85,7 +85,7 @@ describe('mergeJsonConfig', () => {
     expect(created).toBe(false);
     const raw = await readFile(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
-    expect(parsed.mcpServers.iwer.args).toEqual([
+    expect(parsed.mcpServers['iwsdk'].args).toEqual([
       'new-server.js',
       '--port',
       '9999',
@@ -95,14 +95,14 @@ describe('mergeJsonConfig', () => {
   test('works with different JSON keys (servers vs mcpServers)', async () => {
     const filePath = path.join(tmpDir, 'mcp.json');
     const entries = {
-      iwer: { command: 'node', args: ['server.js'] },
+      'iwsdk': { command: 'node', args: ['server.js'] },
     };
 
     await mergeJsonConfig(filePath, entries, 'servers');
 
     const raw = await readFile(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
-    expect(parsed.servers.iwer).toEqual(entries.iwer);
+    expect(parsed.servers['iwsdk']).toEqual(entries['iwsdk']);
     expect(parsed.mcpServers).toBeUndefined();
   });
 
@@ -110,15 +110,15 @@ describe('mergeJsonConfig', () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     const initial = {
       mcpServers: {
-        iwer: { command: 'node', args: ['old-server.js'] },
+        'iwsdk': { command: 'node', args: ['old-server.js'] },
         'my-custom-server': { command: 'python', args: ['server.py'] },
       },
     };
     await writeFile(filePath, JSON.stringify(initial, null, 2));
 
-    // Re-merge with updated iwer entry
+    // Re-merge with updated iwsdk entry
     const entries = {
-      iwer: { command: 'node', args: ['new-server.js', '--port', '9999'] },
+      'iwsdk': { command: 'node', args: ['new-server.js', '--port', '9999'] },
     };
 
     await mergeJsonConfig(filePath, entries, 'mcpServers');
@@ -126,7 +126,7 @@ describe('mergeJsonConfig', () => {
     const raw = await readFile(filePath, 'utf-8');
     const parsed = JSON.parse(raw);
     // Our entry is updated
-    expect(parsed.mcpServers.iwer.args).toEqual(['new-server.js', '--port', '9999']);
+    expect(parsed.mcpServers['iwsdk'].args).toEqual(['new-server.js', '--port', '9999']);
     // User's sibling key survives
     expect(parsed.mcpServers['my-custom-server']).toEqual(
       initial.mcpServers['my-custom-server'],
@@ -139,7 +139,7 @@ describe('unmergeJsonConfig', () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     const config = {
       mcpServers: {
-        iwer: { command: 'node', args: ['server.js'] },
+        'iwsdk': { command: 'node', args: ['server.js'] },
         'iwsdk-rag-local': { command: 'node', args: ['rag.js'] },
         'my-custom-server': { command: 'python', args: ['server.py'] },
       },
@@ -148,7 +148,7 @@ describe('unmergeJsonConfig', () => {
 
     await unmergeJsonConfig(
       filePath,
-      ['iwer', 'iwsdk-rag-local'],
+      ['iwsdk', 'iwsdk-rag-local'],
       'mcpServers',
       false,
     );
@@ -158,7 +158,7 @@ describe('unmergeJsonConfig', () => {
     expect(parsed.mcpServers['my-custom-server']).toEqual(
       config.mcpServers['my-custom-server'],
     );
-    expect(parsed.mcpServers.iwer).toBeUndefined();
+    expect(parsed.mcpServers['iwsdk']).toBeUndefined();
     expect(parsed.mcpServers['iwsdk-rag-local']).toBeUndefined();
   });
 
@@ -166,12 +166,12 @@ describe('unmergeJsonConfig', () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     const config = {
       mcpServers: {
-        iwer: { command: 'node', args: ['server.js'] },
+        'iwsdk': { command: 'node', args: ['server.js'] },
       },
     };
     await writeFile(filePath, JSON.stringify(config, null, 2));
 
-    await unmergeJsonConfig(filePath, ['iwer'], 'mcpServers', true);
+    await unmergeJsonConfig(filePath, ['iwsdk'], 'mcpServers', true);
 
     expect(existsSync(filePath)).toBe(false);
   });
@@ -180,13 +180,13 @@ describe('unmergeJsonConfig', () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     const config = {
       mcpServers: {
-        iwer: { command: 'node', args: ['server.js'] },
+        'iwsdk': { command: 'node', args: ['server.js'] },
       },
       someOtherKey: 'value',
     };
     await writeFile(filePath, JSON.stringify(config, null, 2));
 
-    await unmergeJsonConfig(filePath, ['iwer'], 'mcpServers', true);
+    await unmergeJsonConfig(filePath, ['iwsdk'], 'mcpServers', true);
 
     expect(existsSync(filePath)).toBe(true);
     const raw = await readFile(filePath, 'utf-8');
@@ -199,7 +199,7 @@ describe('unmergeJsonConfig', () => {
     const filePath = path.join(tmpDir, 'nonexistent.json');
 
     await expect(
-      unmergeJsonConfig(filePath, ['iwer'], 'mcpServers', false),
+      unmergeJsonConfig(filePath, ['iwsdk'], 'mcpServers', false),
     ).resolves.toBeUndefined();
   });
 
@@ -207,12 +207,12 @@ describe('unmergeJsonConfig', () => {
     const filePath = path.join(tmpDir, '.mcp.json');
     const config = {
       mcpServers: {
-        iwer: { command: 'node', args: ['server.js'] },
+        'iwsdk': { command: 'node', args: ['server.js'] },
       },
     };
     await writeFile(filePath, JSON.stringify(config, null, 2));
 
-    await unmergeJsonConfig(filePath, ['iwer'], 'mcpServers', false);
+    await unmergeJsonConfig(filePath, ['iwsdk'], 'mcpServers', false);
 
     expect(existsSync(filePath)).toBe(true);
     const raw = await readFile(filePath, 'utf-8');
@@ -226,7 +226,7 @@ describe('mergeTomlConfig', () => {
   test('creates file with managed block when it does not exist', async () => {
     const filePath = path.join(tmpDir, '.codex', 'config.toml');
     const entries = {
-      iwer: { command: 'node', args: ['server.js', '--port', '8081'] },
+      'iwsdk': { command: 'node', args: ['server.js', '--port', '8081'] },
     };
 
     const created = await mergeTomlConfig(filePath, entries);
@@ -235,7 +235,7 @@ describe('mergeTomlConfig', () => {
     const raw = await readFile(filePath, 'utf-8');
     expect(raw).toContain('# --- IWER managed (do not edit) ---');
     expect(raw).toContain('# --- end IWER managed ---');
-    expect(raw).toContain('[mcp_servers.iwer]');
+    expect(raw).toContain('[mcp_servers.iwsdk]');
     expect(raw).toContain('command = "node"');
     expect(raw).toContain('"server.js", "--port", "8081"');
   });
@@ -250,7 +250,7 @@ describe('mergeTomlConfig', () => {
     await writeFile(filePath, userContent);
 
     const entries = {
-      iwer: { command: 'node', args: ['server.js'] },
+      'iwsdk': { command: 'node', args: ['server.js'] },
     };
 
     const created = await mergeTomlConfig(filePath, entries);
@@ -259,7 +259,7 @@ describe('mergeTomlConfig', () => {
     const raw = await readFile(filePath, 'utf-8');
     expect(raw).toContain('[settings]');
     expect(raw).toContain('model = "gpt-4"');
-    expect(raw).toContain('[mcp_servers.iwer]');
+    expect(raw).toContain('[mcp_servers.iwsdk]');
   });
 
   test('replaces old managed block with new one', async () => {
@@ -278,7 +278,7 @@ describe('mergeTomlConfig', () => {
     await writeFile(filePath, existingContent);
 
     const entries = {
-      iwer: { command: 'node', args: ['new-server.js', '--port', '9999'] },
+      'iwsdk': { command: 'node', args: ['new-server.js', '--port', '9999'] },
     };
 
     await mergeTomlConfig(filePath, entries);
@@ -306,7 +306,7 @@ describe('mergeTomlConfig', () => {
     await writeFile(filePath, existingContent);
 
     const entries = {
-      iwer: { command: 'node', args: ['server.js'] },
+      'iwsdk': { command: 'node', args: ['server.js'] },
     };
 
     await mergeTomlConfig(filePath, entries);
@@ -315,7 +315,7 @@ describe('mergeTomlConfig', () => {
     // Should have user content preserved (including the stale markers)
     expect(raw).toContain('[settings]');
     // Should have a valid new managed block appended
-    expect(raw).toContain('[mcp_servers.iwer]');
+    expect(raw).toContain('[mcp_servers.iwsdk]');
     expect(raw).toContain('command = "node"');
   });
 });

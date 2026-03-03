@@ -80,24 +80,6 @@ function createMockDevice() {
   };
 }
 
-// Mock ConsoleCapture
-vi.mock('../src/mcp/console-capture.js', () => ({
-  ConsoleCapture: class MockConsoleCapture {
-    start = vi.fn();
-    stop = vi.fn();
-    query = vi
-      .fn()
-      .mockReturnValue([
-        {
-          timestamp: Date.now(),
-          level: 'log',
-          message: 'test log',
-          args: ['test log'],
-        },
-      ]);
-  },
-}));
-
 // Helper to flush all pending promises
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -159,13 +141,6 @@ describe('MCPWebSocketClient', () => {
   describe('constructor', () => {
     test('should create client with device', () => {
       client = new MCPWebSocketClient(mockDevice as any);
-      expect(client).toBeDefined();
-    });
-
-    test('should start console capture on construction', () => {
-      client = new MCPWebSocketClient(mockDevice as any);
-      client.connect();
-      // ConsoleCapture.start is called
       expect(client).toBeDefined();
     });
   });
@@ -322,7 +297,7 @@ describe('MCPWebSocketClient', () => {
       });
     });
 
-    test('should route get_console_logs to ConsoleCapture', async () => {
+    test('should route get_console_logs to device.remote.dispatch (server-side handles it)', async () => {
       client = new MCPWebSocketClient(mockDevice as any);
       client.connect();
 
@@ -338,9 +313,9 @@ describe('MCPWebSocketClient', () => {
         params: { count: 10 },
       });
 
-      // Should NOT call device.remote.dispatch for console logs
-      await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
+      // Now falls through to device.remote.dispatch since browser-side handling was removed
+      await vi.waitFor(() => mockDevice.remote.dispatch.mock.calls.length > 0);
+      expect(mockDevice.remote.dispatch).toHaveBeenCalledWith('get_console_logs', { count: 10 });
     });
 
     test('should handle reload_page locally without calling device.remote.dispatch', async () => {
@@ -820,7 +795,7 @@ describe('MCPWebSocketClient', () => {
 
       // Should have logged connection messages
       const iwerLogs = consoleSpy.mock.calls.filter(
-        (call) => typeof call[0] === 'string' && call[0].includes('[IWER-MCP]'),
+        (call) => typeof call[0] === 'string' && call[0].includes('[IWSDK-MCP]'),
       );
       expect(iwerLogs.length).toBeGreaterThan(0);
 
@@ -845,12 +820,12 @@ describe('MCPWebSocketClient', () => {
         expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
       });
 
-      // No [IWER-MCP] logs should be present in either log or debug
+      // No [IWSDK-MCP] logs should be present in either log or debug
       const iwerLogCalls = consoleLogSpy.mock.calls.filter(
-        (call) => typeof call[0] === 'string' && call[0].includes('[IWER-MCP]'),
+        (call) => typeof call[0] === 'string' && call[0].includes('[IWSDK-MCP]'),
       );
       const iwerDebugCalls = consoleDebugSpy.mock.calls.filter(
-        (call) => typeof call[0] === 'string' && call[0].includes('[IWER-MCP]'),
+        (call) => typeof call[0] === 'string' && call[0].includes('[IWSDK-MCP]'),
       );
       expect(iwerLogCalls).toHaveLength(0);
       expect(iwerDebugCalls).toHaveLength(0);

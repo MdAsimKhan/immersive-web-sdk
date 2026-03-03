@@ -6,7 +6,6 @@
  */
 
 import type { XRDevice } from 'iwer';
-import { ConsoleCapture, type LogQuery } from './console-capture.js';
 
 /**
  * Interface that any framework can implement to provide MCP tools.
@@ -53,13 +52,12 @@ interface MCPResponse {
 
 /**
  * WebSocket client that connects the browser to the Vite dev server's MCP endpoint.
- * Routes commands directly to device.remote.dispatch() for IWER tools,
- * and handles console capture locally.
+ * Routes commands to device.remote.dispatch() for IWER tools,
+ * framework runtime for IWSDK tools, and handles page reload locally.
  */
 export class MCPWebSocketClient {
   private ws: WebSocket | null = null;
   private device: XRDevice;
-  private consoleCapture: ConsoleCapture;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
@@ -75,8 +73,6 @@ export class MCPWebSocketClient {
   constructor(device: XRDevice, options: { verbose?: boolean } = {}) {
     this.device = device;
     this.verbose = options.verbose ?? false;
-    this.consoleCapture = new ConsoleCapture();
-    this.consoleCapture.start();
 
     // sessionStorage is scoped per tab — survives reloads/HMR but not tab close
     let id = typeof sessionStorage !== 'undefined'
@@ -117,14 +113,14 @@ export class MCPWebSocketClient {
     const wsUrl = `${protocol}//${host}:${wsPort}/__iwer_mcp`;
 
     if (this.verbose) {
-      console.log('[IWER-MCP] Connecting to:', wsUrl);
+      console.log('[IWSDK-MCP] Connecting to:', wsUrl);
     }
 
     try {
       this.ws = new WebSocket(wsUrl);
       this.setupEventHandlers();
     } catch (error) {
-      console.error('[IWER-MCP] Failed to create WebSocket:', error);
+      console.error('[IWSDK-MCP] Failed to create WebSocket:', error);
       this.ws = null;
       this.scheduleReconnect();
     }
@@ -146,7 +142,6 @@ export class MCPWebSocketClient {
       this.ws.close();
       this.ws = null;
     }
-    this.consoleCapture.stop();
   }
 
   private getVitePort(): number {
@@ -161,7 +156,7 @@ export class MCPWebSocketClient {
 
     this.ws.onopen = () => {
       if (this.verbose) {
-        console.log('[IWER-MCP] Connected');
+        console.log('[IWSDK-MCP] Connected');
       }
       this.reconnectAttempts = 0;
     };
@@ -169,7 +164,7 @@ export class MCPWebSocketClient {
     this.ws.onclose = (event) => {
       if (this.verbose) {
         console.log(
-          '[IWER-MCP] Disconnected:',
+          '[IWSDK-MCP] Disconnected:',
           event.reason || 'Connection closed',
         );
       }
@@ -180,7 +175,7 @@ export class MCPWebSocketClient {
     };
 
     this.ws.onerror = (error) => {
-      console.error('[IWER-MCP] WebSocket error:', error);
+      console.error('[IWSDK-MCP] WebSocket error:', error);
     };
 
     this.ws.onmessage = async (event) => {
@@ -194,18 +189,18 @@ export class MCPWebSocketClient {
     try {
       request = JSON.parse(data);
     } catch {
-      console.error('[IWER-MCP] Invalid JSON received:', data);
+      console.error('[IWSDK-MCP] Invalid JSON received:', data);
       return;
     }
 
     // Validate request structure
     if (typeof request.id !== 'string' || typeof request.method !== 'string') {
-      console.error('[IWER-MCP] Malformed request (missing id or method):', request);
+      console.error('[IWSDK-MCP] Malformed request (missing id or method):', request);
       return;
     }
 
     if (this.verbose) {
-      console.debug('[IWER-MCP] Received:', request.method, request.params);
+      console.debug('[IWSDK-MCP] Received:', request.method, request.params);
     }
 
     const response: MCPResponse = { id: request.id };
@@ -224,9 +219,9 @@ export class MCPWebSocketClient {
 
     if (this.verbose) {
       if (response.error) {
-        console.debug('[IWER-MCP] Error:', response.error.message);
+        console.debug('[IWSDK-MCP] Error:', response.error.message);
       } else {
-        console.debug('[IWER-MCP] Result:', response.result);
+        console.debug('[IWSDK-MCP] Result:', response.result);
       }
     }
 
@@ -236,7 +231,7 @@ export class MCPWebSocketClient {
   /**
    * Dispatch a method call to the appropriate handler.
    * Priority:
-   * 1. Plugin-specific tools (console capture, page reload - always local)
+   * 1. Plugin-specific tools (page reload - always local)
    * 2. Framework runtime (IWSDK or any framework providing FRAMEWORK_MCP_RUNTIME)
    * 3. IWER device control (device.remote.dispatch)
    */
@@ -245,19 +240,6 @@ export class MCPWebSocketClient {
     params: Record<string, unknown>,
   ): Promise<unknown> {
     // 1. Handle plugin-specific tools locally
-    if (method === 'get_console_logs') {
-      const query = { ...params } as LogQuery;
-      // Default to non-debug levels if no level filter specified
-      // Debug logs are typically too verbose for MCP consumers
-      if (
-        !query.level ||
-        (Array.isArray(query.level) && query.level.length === 0)
-      ) {
-        query.level = ['log', 'info', 'warn', 'error'];
-      }
-      return this.consoleCapture.query(query);
-    }
-
     if (method === 'reload_page') {
       // Defer reload so the WebSocket response can flush before the page tears down
       setTimeout(() => window.location.reload(), 50);
@@ -288,7 +270,7 @@ export class MCPWebSocketClient {
   private scheduleReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       if (this.verbose) {
-        console.debug('[IWER-MCP] Max reconnect attempts reached');
+        console.debug('[IWSDK-MCP] Max reconnect attempts reached');
       }
       return;
     }
@@ -298,7 +280,7 @@ export class MCPWebSocketClient {
 
     if (this.verbose) {
       console.debug(
-        `[IWER-MCP] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`,
+        `[IWSDK-MCP] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`,
       );
     }
 

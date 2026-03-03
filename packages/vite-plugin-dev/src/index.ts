@@ -14,15 +14,28 @@ import { WebSocketServer } from 'ws';
 import type { WebSocket } from 'ws';
 import { buildInjectionBundle } from './injection-bundler.js';
 import { createRelayHandler } from './mcp-relay.js';
+import {
+  launchManagedBrowser,
+  type ManagedBrowser,
+} from './headless-browser.js';
 import type {
-  IWERPluginOptions,
-  ProcessedIWEROptions,
+  DevPluginOptions,
+  ProcessedDevOptions,
   InjectionBundleResult,
   AiTool,
 } from './types.js';
 
 // Export types for users
-export type { IWERPluginOptions, SEMOptions, MCPOptions, AiTool } from './types.js';
+export type {
+  DevPluginOptions,
+  AiOptions,
+  EmulatorOptions,
+  ProcessedDevOptions,
+  IWERPluginOptions,
+  SEMOptions,
+  MCPOptions,
+  AiTool,
+} from './types.js';
 
 /**
  * MCP config target descriptor for each AI tool.
@@ -274,36 +287,44 @@ function warmupRagMcp(ragMcpServerPath: string, verbose: boolean): void {
 /**
  * Process and normalize plugin options with defaults
  */
-function processOptions(options: IWERPluginOptions = {}): ProcessedIWEROptions {
-  const processed: ProcessedIWEROptions = {
-    device: options.device || 'metaQuest3',
-    injectOnBuild: options.injectOnBuild || false,
-    activation: options.activation || 'localhost',
+function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
+  const emulator = options.emulator ?? {};
+  const processed: ProcessedDevOptions = {
+    device: emulator.device || 'metaQuest3',
+    injectOnBuild: emulator.injectOnBuild || false,
+    activation: emulator.activation || 'localhost',
     verbose: options.verbose || false,
     userAgentException:
-      options.userAgentException || new RegExp('OculusBrowser'),
+      emulator.userAgentException || new RegExp('OculusBrowser'),
   };
 
-  // Process SEM options if provided
-  if (options.sem) {
+  // Process SEM options from emulator.environment
+  if (emulator.environment) {
     processed.sem = {
-      defaultScene: options.sem.defaultScene || 'living_room',
+      defaultScene: emulator.environment,
     };
   }
 
-  // Process MCP options - enabled by default unless explicitly disabled
-  const mcpOption = options.mcp ?? true;
-  if (mcpOption) {
-    if (typeof mcpOption === 'boolean') {
+  // Process AI/MCP options - enabled by default unless explicitly disabled
+  const aiOption = options.ai ?? true;
+  if (aiOption) {
+    if (typeof aiOption === 'boolean') {
       processed.mcp = {
         verbose: false,
         tools: ['claude', 'cursor', 'copilot', 'codex'],
+        headless: false,
+        viewport: { width: 800, height: 800 },
       };
     } else {
       processed.mcp = {
-        port: mcpOption.port,
-        verbose: mcpOption.verbose ?? false,
-        tools: mcpOption.tools ?? ['claude', 'cursor', 'copilot', 'codex'],
+        port: aiOption.port,
+        verbose: aiOption.verbose ?? false,
+        tools: aiOption.tools ?? ['claude', 'cursor', 'copilot', 'codex'],
+        headless: aiOption.headless ?? false,
+        viewport: {
+          width: aiOption.viewport?.width ?? 800,
+          height: aiOption.viewport?.height ?? 800,
+        },
       };
     }
   }
@@ -312,26 +333,39 @@ function processOptions(options: IWERPluginOptions = {}): ProcessedIWEROptions {
 }
 
 /**
- * Vite plugin for IWER (Immersive Web Emulation Runtime) injection
- * Injects WebXR emulation runtime during development and optionally during build
+ * Vite plugin for IWSDK development — XR emulation, AI agent tooling, and Playwright browser
  */
-export function injectIWER(options: IWERPluginOptions = {}): Plugin {
+export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
   const pluginOptions = processOptions(options);
   let injectionBundle: InjectionBundleResult | null = null;
   let config: ResolvedConfig;
   let mcpWss: WebSocketServer | null = null;
   let mcpClients: Set<WebSocket> | null = null;
+  let managedBrowser: ManagedBrowser | null = null;
   const VIRTUAL_ID = '/@iwer-injection-runtime';
   const RESOLVED_VIRTUAL_ID = '\0' + VIRTUAL_ID;
 
   return {
-    name: 'inject-iwer',
+    name: 'iwsdk-dev',
+
+    config(userConfig) {
+      // Suppress Vite's auto-open — Playwright manages the browser tab.
+      // Mutate userConfig directly since plugin return values have lower
+      // precedence and would be overridden by the user's `open: true`.
+      if (pluginOptions.mcp) {
+        if (userConfig.server) {
+          userConfig.server.open = false;
+        } else {
+          userConfig.server = { open: false };
+        }
+      }
+    },
 
     configResolved(resolvedConfig) {
       config = resolvedConfig;
 
       if (pluginOptions.verbose) {
-        console.log('🔧 IWER Plugin Configuration:');
+        console.log('🔧 IWSDK Dev Configuration:');
         console.log(`  - Device: ${pluginOptions.device}`);
         console.log(
           `  - SEM: ${pluginOptions.sem ? 'enabled (' + pluginOptions.sem.defaultScene + ')' : 'disabled'}`,
@@ -369,31 +403,78 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
         mcpClients!.add(ws);
 
         if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
-          console.log('[MCP-IWER] Client connected');
+          console.log('[IWSDK-MCP] Client connected');
         }
 
-        ws.on('message', (data: Buffer) => {
+        ws.on('message', async (data: Buffer) => {
           const message = data.toString();
           if (pluginOptions.mcp?.verbose) {
             console.log(
-              '[MCP-IWER] Message received:',
+              '[IWSDK-MCP] Message received:',
               message.substring(0, 100),
             );
           }
 
-          relay.onMessage(ws, message, mcpClients!);
+          // Intercept server-side tools that use Playwright directly.
+          // These respond from the Node process without a browser round-trip.
+          let intercepted = false;
+          try {
+            const parsed = JSON.parse(message);
+
+            // Console logs: Playwright captures via CDP
+            if (parsed.method === 'get_console_logs' && parsed.id) {
+              intercepted = true;
+              const params = parsed.params ?? {};
+              if (!params.level) {
+                params.level = ['log', 'info', 'warn', 'error'];
+              }
+              const result = managedBrowser ? managedBrowser.queryLogs(params) : [];
+              ws.send(JSON.stringify({ id: parsed.id, result }));
+            }
+
+            // Screenshot: Playwright captures via CDP compositor
+            if (!intercepted && parsed.method === 'screenshot' && parsed.id) {
+              intercepted = true;
+              try {
+                if (managedBrowser) {
+                  const buffer = await managedBrowser.screenshot();
+                  const base64 = buffer.toString('base64');
+                  ws.send(JSON.stringify({
+                    id: parsed.id,
+                    result: { imageData: base64, mimeType: 'image/png' },
+                  }));
+                } else {
+                  ws.send(JSON.stringify({
+                    id: parsed.id,
+                    error: { code: -32000, message: 'Browser not ready' },
+                  }));
+                }
+              } catch (err) {
+                ws.send(JSON.stringify({
+                  id: parsed.id,
+                  error: { code: -32000, message: err instanceof Error ? err.message : String(err) },
+                }));
+              }
+            }
+          } catch {
+            // Not JSON — fall through to relay
+          }
+
+          if (!intercepted) {
+            relay.onMessage(ws, message, mcpClients!);
+          }
         });
 
         ws.on('close', () => {
           mcpClients!.delete(ws);
           if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
-            console.log('[MCP-IWER] Client disconnected');
+            console.log('[IWSDK-MCP] Client disconnected');
           }
         });
 
         ws.on('error', (error) => {
           if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
-            console.error('[MCP-IWER] WebSocket error:', error);
+            console.error('[IWSDK-MCP] WebSocket error:', error);
           }
         });
       });
@@ -405,7 +486,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
         }
 
         if (pluginOptions.mcp?.verbose || pluginOptions.verbose) {
-          console.log('[MCP-IWER] WebSocket upgrade request received');
+          console.log('[IWSDK-MCP] WebSocket upgrade request received');
         }
 
         mcpWss!.handleUpgrade(request, socket, head, (ws) => {
@@ -415,7 +496,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
 
       if (pluginOptions.verbose) {
         console.log(
-          '🔌 MCP-IWER: WebSocket endpoint registered at /__iwer_mcp',
+          '🔌 IWSDK-MCP: WebSocket endpoint registered at /__iwer_mcp',
         );
       }
 
@@ -423,12 +504,12 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
       // We wait for the 'listening' event to get the actual port (in case configured port was busy)
 
       // Find the path to the MCP server script
-      // It's installed in node_modules/@iwsdk/vite-plugin-iwer/dist/mcp-server.js
+      // It's installed in node_modules/@iwsdk/vite-plugin-dev/dist/mcp-server.js
       const mcpServerPath = path.join(
         config.root,
         'node_modules',
         '@iwsdk',
-        'vite-plugin-iwer',
+        'vite-plugin-dev',
         'dist',
         'mcp-server.js',
       );
@@ -452,7 +533,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
 
       const writeMcpConfigs = async (actualPort: number) => {
         const serverEntries: Record<string, { command: string; args: string[] }> = {
-          iwer: {
+          iwsdk: {
             command: 'node',
             args: [mcpServerPath, '--port', String(actualPort)],
           },
@@ -522,6 +603,19 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
         // Warm up RAG MCP server (downloads embedding model if needed)
         // This ensures the model is cached before Claude Code tries to use it
         warmupRagMcp(ragMcpServerPath, pluginOptions.verbose);
+
+        // Launch Playwright-managed browser
+        const protocol = server.config.server.https ? 'https' : 'http';
+        const url = `${protocol}://localhost:${actualPort}`;
+        const headless = pluginOptions.mcp?.headless ?? false;
+        const viewport = pluginOptions.mcp?.viewport ?? { width: 800, height: 800 };
+        launchManagedBrowser(url, headless, pluginOptions.verbose, viewport)
+          .then((browser) => {
+            managedBrowser = browser;
+          })
+          .catch((error) => {
+            console.error('❌ IWSDK: Failed to launch browser:', error);
+          });
       });
 
       // Clean up WebSocket server and MCP config files when Vite server closes
@@ -536,6 +630,12 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
         }
 
         const doCleanup = async () => {
+          // Close managed browser
+          if (managedBrowser) {
+            await managedBrowser.close().catch(() => {});
+            managedBrowser = null;
+          }
+
           // Wait for any in-flight config write to finish before cleaning up
           if (configWritePromise) {
             await configWritePromise.catch(() => {});
@@ -580,7 +680,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
     load(id) {
       if (id === RESOLVED_VIRTUAL_ID) {
         if (!injectionBundle) {
-          return 'console.warn("[IWER Plugin] Runtime not available - injection bundle not loaded");';
+          return 'console.warn("[IWSDK Dev] Runtime not available - injection bundle not loaded");';
         }
         return injectionBundle.code;
       }
@@ -595,7 +695,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
       if (!shouldInject) {
         if (pluginOptions.verbose && config.command === 'build') {
           console.log(
-            '⏭️  IWER Plugin: Skipping build injection (injectOnBuild: false)',
+            '⏭️  IWSDK Dev: Skipping build injection (injectOnBuild: false)',
           );
         }
         return;
@@ -604,18 +704,18 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
       try {
         if (pluginOptions.verbose) {
           console.log(
-            '🚀 IWER Plugin: Starting injection bundle generation...',
+            '🚀 IWSDK Dev: Starting injection bundle generation...',
           );
         }
 
         injectionBundle = await buildInjectionBundle(pluginOptions);
 
         if (pluginOptions.verbose) {
-          console.log('✅ IWER Plugin: Injection bundle ready');
+          console.log('✅ IWSDK Dev: Injection bundle ready');
         }
       } catch (error) {
         console.error(
-          '❌ IWER Plugin: Failed to generate injection bundle:',
+          '❌ IWSDK Dev: Failed to generate injection bundle:',
           error,
         );
         // Continue without injection rather than failing the build
@@ -635,7 +735,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
         }
 
         if (pluginOptions.verbose) {
-          console.log('💉 IWER Plugin: Injecting runtime script into HTML');
+          console.log('💉 IWSDK Dev: Injecting runtime script into HTML');
         }
 
         // Inject the script using Vite's tag API for robustness
@@ -662,7 +762,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
 
         if (shouldInject && injectionBundle) {
           const mode = config.command === 'serve' ? 'Development' : 'Build';
-          console.log(`\n🥽 IWER Plugin Summary (${mode}):`);
+          console.log(`\n🥽 IWSDK Dev Summary (${mode}):`);
           console.log(`  - Device: ${pluginOptions.device}`);
           console.log(
             `  - Runtime injected: ${(injectionBundle.size / 1024).toFixed(1)}KB`,
@@ -676,7 +776,7 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
           }
 
           if (pluginOptions.mcp) {
-            console.log('  - MCP: enabled (WebSocket at /__iwer_mcp)');
+            console.log('  - AI: enabled (WebSocket at /__iwer_mcp)');
           }
 
           if (pluginOptions.activation === 'localhost') {
@@ -691,3 +791,6 @@ export function injectIWER(options: IWERPluginOptions = {}): Plugin {
     },
   };
 }
+
+/** @deprecated Use `iwsdkDev` instead */
+export const injectIWER = iwsdkDev;

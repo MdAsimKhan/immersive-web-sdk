@@ -7,6 +7,7 @@
 
 /**
  * Synthetic Environment Module configuration
+ * @deprecated Use `emulator.environment` instead
  */
 export interface SEMOptions {
   /**
@@ -24,10 +25,10 @@ export interface SEMOptions {
 export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex';
 
 /**
- * MCP (Model Context Protocol) configuration
- * Enables AI agent control of the IWER runtime via WebSocket
+ * AI agent tooling configuration.
+ * Enables AI agent control of the emulated XR runtime via MCP + WebSocket.
  */
-export interface MCPOptions {
+export interface AiOptions {
   /**
    * Override the Vite dev server port used for the MCP WebSocket connection.
    * If not specified, the actual Vite dev server port is auto-detected.
@@ -46,36 +47,34 @@ export interface MCPOptions {
    * @default ['claude', 'cursor', 'copilot', 'codex']
    */
   tools?: AiTool[];
+
+  /**
+   * Run the Playwright-managed browser in headless mode (no visible window).
+   * When false, the browser window is visible so you can watch the agent
+   * interact with the scene.
+   * @default false
+   */
+  headless?: boolean;
+
+  /**
+   * Browser viewport dimensions. Controls the screenshot resolution.
+   * @default { width: 800, height: 800 }
+   */
+  viewport?: { width?: number; height?: number };
 }
 
+/** @deprecated Use `AiOptions` instead */
+export type MCPOptions = AiOptions;
+
 /**
- * Main plugin options interface
+ * XR emulator configuration
  */
-export interface IWERPluginOptions {
+export interface EmulatorOptions {
   /**
    * XR device to emulate
    * @default 'metaQuest3'
    */
   device?: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'oculusQuest1';
-
-  /**
-   * Synthetic Environment Module configuration
-   * If undefined, SEM is not activated
-   */
-  sem?: SEMOptions;
-
-  /**
-   * MCP (Model Context Protocol) configuration
-   * Enables AI agent control of the IWER runtime via WebSocket
-   * If undefined, MCP is not activated
-   */
-  mcp?: MCPOptions | boolean;
-
-  /**
-   * Inject script during build phase (in addition to dev)
-   * @default false
-   */
-  injectOnBuild?: boolean;
 
   /**
    * When to activate the WebXR emulation
@@ -87,10 +86,21 @@ export interface IWERPluginOptions {
   activation?: 'localhost' | 'always' | RegExp;
 
   /**
-   * Enable verbose logging
+   * Synthetic environment to load in the emulator
+   * @default undefined (no environment)
+   */
+  environment?:
+    | 'living_room'
+    | 'meeting_room'
+    | 'music_room'
+    | 'office_large'
+    | 'office_small';
+
+  /**
+   * Inject script during build phase (in addition to dev)
    * @default false
    */
-  verbose?: boolean;
+  injectOnBuild?: boolean;
 
   /**
    * User-Agent exception pattern. If the UA matches this RegExp, the
@@ -102,9 +112,36 @@ export interface IWERPluginOptions {
 }
 
 /**
+ * Main plugin options interface
+ */
+export interface DevPluginOptions {
+  /**
+   * XR emulator configuration
+   */
+  emulator?: EmulatorOptions;
+
+  /**
+   * AI agent tooling configuration.
+   * Enables AI agent control of the emulated XR runtime via MCP + WebSocket.
+   * Pass `true` for defaults, `false` to disable, or an object for fine-grained control.
+   * @default true
+   */
+  ai?: boolean | AiOptions;
+
+  /**
+   * Enable verbose logging
+   * @default false
+   */
+  verbose?: boolean;
+}
+
+/** @deprecated Use `DevPluginOptions` instead */
+export type IWERPluginOptions = DevPluginOptions;
+
+/**
  * Internal processed options with all defaults applied
  */
-export interface ProcessedIWEROptions {
+export interface ProcessedDevOptions {
   device: 'metaQuest2' | 'metaQuest3' | 'metaQuestPro' | 'oculusQuest1';
   sem?: {
     defaultScene: string;
@@ -113,6 +150,8 @@ export interface ProcessedIWEROptions {
     port?: number;
     verbose: boolean;
     tools: AiTool[];
+    headless: boolean;
+    viewport: { width: number; height: number };
   };
   injectOnBuild: boolean;
   activation: 'localhost' | 'always' | RegExp;
@@ -120,8 +159,11 @@ export interface ProcessedIWEROptions {
   userAgentException?: RegExp | string;
 }
 
+/** @deprecated Use `ProcessedDevOptions` instead */
+export type ProcessedIWEROptions = ProcessedDevOptions;
+
 /**
- * IWER injection bundle result
+ * Injection bundle result
  */
 export interface InjectionBundleResult {
   code: string;

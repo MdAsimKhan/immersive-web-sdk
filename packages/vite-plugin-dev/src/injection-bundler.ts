@@ -8,7 +8,7 @@
 import { readFile } from 'fs/promises';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
-import type { ProcessedIWEROptions, InjectionBundleResult } from './types.js';
+import type { ProcessedDevOptions, InjectionBundleResult } from './types.js';
 
 // Get __dirname equivalent for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -18,11 +18,11 @@ const __dirname = path.dirname(__filename);
  * Load and customize the pre-built injection bundle
  */
 export async function buildInjectionBundle(
-  options: ProcessedIWEROptions,
+  options: ProcessedDevOptions,
 ): Promise<InjectionBundleResult> {
   try {
     if (options.verbose) {
-      console.log('🔄 Loading pre-built IWER injection bundle...');
+      console.log('🔄 Loading pre-built IWSDK injection bundle...');
     }
 
     // Load the pre-built injection bundle
@@ -48,7 +48,7 @@ export async function buildInjectionBundle(
     // Replace the CONFIG token with actual configuration
     const configReplacement = JSON.stringify(config, null, 2);
     bundleCode = bundleCode.replace(
-      '"__IWER_CONFIG_REPLACEMENT_TOKEN__"',
+      '"__IWSDK_DEV_CONFIG__"',
       configReplacement,
     );
 
@@ -56,13 +56,13 @@ export async function buildInjectionBundle(
 
     if (options.verbose) {
       console.log(
-        `✅ IWER injection bundle loaded and configured (${(size / 1024).toFixed(1)}KB)`,
+        `✅ IWSDK injection bundle loaded and configured (${(size / 1024).toFixed(1)}KB)`,
       );
     }
 
     return { code: bundleCode, size };
   } catch (error) {
-    console.error('❌ Failed to load IWER injection bundle:', error);
+    console.error('❌ Failed to load IWSDK injection bundle:', error);
     console.error(
       'Make sure to run "pnpm build:injection" first to create the pre-built bundle.',
     );

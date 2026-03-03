@@ -6,10 +6,3 @@
  */
 
 export { MCPWebSocketClient, initMCPClient } from './ws-client.js';
-export {
-  ConsoleCapture,
-  type LogQuery,
-  type CapturedLog,
-  type LogLevel,
-} from './console-capture.js';
-export { patchGetContext } from './screenshot-capture.js';

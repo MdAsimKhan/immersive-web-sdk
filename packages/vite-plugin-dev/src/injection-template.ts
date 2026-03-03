@@ -15,11 +15,10 @@ import {
   oculusQuest1,
 } from 'iwer';
 import { initMCPClient } from './mcp/ws-client.js';
-import { patchGetContext } from './mcp/screenshot-capture.js';
-import type { ProcessedIWEROptions } from './types.js';
+import type { ProcessedDevOptions } from './types.js';
 
 // Configuration will be replaced by the plugin
-const CONFIG: ProcessedIWEROptions = '__IWER_CONFIG_REPLACEMENT_TOKEN__' as any;
+const CONFIG: ProcessedDevOptions = '__IWSDK_DEV_CONFIG__' as any;
 
 // Device configuration mapping
 const DEVICE_CONFIGS = {
@@ -31,8 +30,8 @@ const DEVICE_CONFIGS = {
 
 // Activation check function
 function shouldActivate(
-  activationMode: ProcessedIWEROptions['activation'],
-  userAgentException?: ProcessedIWEROptions['userAgentException'],
+  activationMode: ProcessedDevOptions['activation'],
+  userAgentException?: ProcessedDevOptions['userAgentException'],
 ): boolean {
   // UA exception: if provided and matches current UA, block activation
   if (userAgentException) {
@@ -90,8 +89,8 @@ function shouldActivate(
 }
 
 // Main injection function
-function injectIWER(config: ProcessedIWEROptions): void {
-  console.log('[IWER Plugin] Configuration:', config);
+function initDevRuntime(config: ProcessedDevOptions): void {
+  console.log('[IWSDK Dev] Configuration:', config);
 
   const shouldActivateResult = shouldActivate(
     config.activation,
@@ -100,13 +99,13 @@ function injectIWER(config: ProcessedIWEROptions): void {
 
   if (!shouldActivateResult) {
     if (config.verbose) {
-      console.log('[IWER Plugin] Skipping activation - not on localhost');
+      console.log('[IWSDK Dev] Skipping activation - not on localhost');
     }
     return;
   }
 
   if (config.verbose) {
-    console.log('[IWER Plugin] 🎯 Activating IWER runtime...');
+    console.log('[IWSDK Dev] 🎯 Activating IWER runtime...');
   }
 
   try {
@@ -117,7 +116,7 @@ function injectIWER(config: ProcessedIWEROptions): void {
     if (!deviceConfig) {
       const availableDevices = Object.keys(DEVICE_CONFIGS).join(', ');
       console.error(
-        `[IWER Plugin] ❌ Invalid device configuration: "${config.device}"\n` +
+        `[IWSDK Dev] ❌ Invalid device configuration: "${config.device}"\n` +
           `Available devices: ${availableDevices}\n` +
           `Falling back to default device: metaQuest3`,
       );
@@ -128,18 +127,23 @@ function injectIWER(config: ProcessedIWEROptions): void {
 
     if (config.verbose) {
       console.log(
-        '[IWER Plugin] 📱 Using device configuration:',
+        '[IWSDK Dev] 📱 Using device configuration:',
         deviceConfig ? config.device : 'metaQuest3 (fallback)',
       );
     }
     xrDevice.installRuntime();
-    xrDevice.installDevUI(DevUI);
+
+    // Skip DevUI when MCP is active — Playwright manages the browser,
+    // so the DevUI overlay is not interactive and can interfere with rendering.
+    if (!config.mcp) {
+      xrDevice.installDevUI(DevUI);
+    }
 
     // Configure SEM if provided
     if (config.sem) {
       if (config.verbose) {
         console.log(
-          '[IWER Plugin] 🌐 Installing SEM with scene:',
+          '[IWSDK Dev] 🌐 Installing SEM with scene:',
           config.sem.defaultScene,
         );
       }
@@ -149,7 +153,7 @@ function injectIWER(config: ProcessedIWEROptions): void {
 
       if (config.verbose) {
         console.log(
-          '[IWER Plugin] 📍 Loading default environment from CDN:',
+          '[IWSDK Dev] 📍 Loading default environment from CDN:',
           config.sem.defaultScene,
         );
       }
@@ -158,15 +162,11 @@ function injectIWER(config: ProcessedIWEROptions): void {
       xrDevice.sem?.loadDefaultEnvironment(config.sem.defaultScene);
     }
 
-    // Configure MCP if provided
-    if (config.mcp) {
-      // Patch getContext to force preserveDrawingBuffer before any WebGL
-      // context is created. Only applied when MCP is active to avoid the
-      // perf cost on production / non-MCP dev builds.
-      patchGetContext();
-
+    // Initialize MCP client only in the Playwright-managed tab.
+    // Manual browser tabs get IWER + DevUI but are not remote-controlled.
+    if (config.mcp && (window as any).__IWER_MCP_MANAGED) {
       if (config.verbose) {
-        console.log('[IWER Plugin] 🔌 Initializing MCP client...');
+        console.log('[IWSDK Dev] 🔌 Initializing MCP client...');
       }
 
       const mcpClient = initMCPClient(xrDevice, {
@@ -178,20 +178,20 @@ function injectIWER(config: ProcessedIWEROptions): void {
       (window as any).IWER_MCP = mcpClient;
 
       if (config.verbose) {
-        console.log('[IWER Plugin] ✅ MCP client initialized');
+        console.log('[IWSDK Dev] ✅ MCP client initialized');
       }
     }
 
     if (config.verbose) {
-      console.log('[IWER Plugin] ✅ Runtime activated successfully!');
+      console.log('[IWSDK Dev] ✅ Runtime activated successfully!');
     }
 
     // Expose for debugging
     (window as any).IWER_DEVICE = xrDevice;
   } catch (error) {
-    console.error('[IWER Plugin] ❌ Failed to activate runtime:', error);
+    console.error('[IWSDK Dev] ❌ Failed to activate runtime:', error);
   }
 }
 
 // Execute with configuration
-injectIWER(CONFIG);
+initDevRuntime(CONFIG);

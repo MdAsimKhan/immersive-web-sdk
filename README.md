@@ -40,7 +40,7 @@ For guides, concepts, and API reference, visit: **[https://iwsdk.dev](https://iw
 | [@iwsdk/glxf](./packages/glxf)                                             | GLXF scene format loader for Three.js             |
 | [@iwsdk/locomotor](./packages/locomotor)                                   | Locomotion engine for Three.js WebXR              |
 | [@iwsdk/xr-input](./packages/xr-input)                                     | WebXR input system for Three.js                   |
-| [@iwsdk/vite-plugin-iwer](./packages/vite-plugin-iwer)                     | WebXR emulator injection for development          |
+| [@iwsdk/vite-plugin-dev](./packages/vite-plugin-dev)                       | XR emulation, AI agent tooling, and dev browser   |
 | [@iwsdk/vite-plugin-gltf-optimizer](./packages/vite-plugin-gltf-optimizer) | GLTF/GLB optimization during build                |
 | [@iwsdk/vite-plugin-uikitml](./packages/vite-plugin-uikitml)               | UIKitML to JSON compiler for spatial UI           |
 | [@iwsdk/vite-plugin-metaspatial](./packages/vite-plugin-metaspatial)       | Meta Spatial Editor integration                   |

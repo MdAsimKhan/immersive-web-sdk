@@ -651,7 +651,7 @@ function finalizeInitialization(
 /**
  * Setup MCP runtime for framework-specific tools.
  * This creates the MCPRuntime and exposes it on window.FRAMEWORK_MCP_RUNTIME
- * for vite-plugin-iwer to route framework-specific tool calls.
+ * for vite-plugin-dev to route framework-specific tool calls.
  */
 function setupMCPRuntime(world: World) {
   world.mcpRuntime = new MCPRuntime(world);

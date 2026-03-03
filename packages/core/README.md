@@ -68,12 +68,12 @@ cube.addComponent(OneHandGrabbable, { rotate: true, translate: true });
 For the best development experience, use our Vite plugins:
 
 ```bash
-npm install -D @iwsdk/vite-plugin-iwer @iwsdk/vite-plugin-gltf-optimizer @iwsdk/vite-plugin-uikitml
+npm install -D @iwsdk/vite-plugin-dev @iwsdk/vite-plugin-gltf-optimizer @iwsdk/vite-plugin-uikitml
 ```
 
 | Plugin                              | Description                                      |
 | ----------------------------------- | ------------------------------------------------ |
-| `@iwsdk/vite-plugin-iwer`           | WebXR emulator injection for desktop development |
+| `@iwsdk/vite-plugin-dev`            | XR emulation, AI agent tooling, and dev browser  |
 | `@iwsdk/vite-plugin-gltf-optimizer` | GLTF/GLB optimization during build               |
 | `@iwsdk/vite-plugin-uikitml`        | Compile HTML-like UI templates to spatial UI     |
 | `@iwsdk/vite-plugin-metaspatial`    | Meta Spatial Editor integration                  |

@@ -1,5 +1,5 @@
 import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
-import { injectIWER } from '@iwsdk/vite-plugin-iwer';
+import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
 import { compileUIKit } from '@iwsdk/vite-plugin-uikitml';
 import { defineConfig } from 'vite';
 import mkcert from 'vite-plugin-mkcert';
@@ -7,14 +7,14 @@ import mkcert from 'vite-plugin-mkcert';
 export default defineConfig({
   plugins: [
     mkcert(),
-    injectIWER({
-      device: 'metaQuest3',
-      activation: 'always',
-      injectOnBuild: true,
-      verbose: true,
-      sem: {
-        defaultScene: 'living_room',
+    iwsdkDev({
+      emulator: {
+        device: 'metaQuest3',
+        environment: 'living_room',
+        activation: 'always',
+        injectOnBuild: true,
       },
+      verbose: true,
     }),
 
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
