@@ -1,250 +1,305 @@
 ---
 name: test-ecs-core
-description: Automated test for ECS core functionality (system registration, component schemas, Transform sync, Visibility, pause/step/resume, system toggle). Targets any running example (default poke). Uses dynamic entity discovery — no hardcoded indices.
-argument-hint: [--suite systems|components|transform|visibility|lifecycle|all]
+description: "Test ECS core functionality (system registration, components, Transform sync, pause/step/resume, system toggle, entity discovery, snapshots) against the poke example using mcp-call.mjs WebSocket CLI."
+argument-hint: "[--suite systems|components|transform|lifecycle|toggle|discovery|snapshot|stability|all]"
 ---
 
 # ECS Core Test
 
-**Target Example:** `examples/poke` (or any running example)
+Run 8 test suites covering ECS system registration, component schemas, Transform sync, pause/step/resume, system toggle, entity discovery, snapshot/diff, and stability.
 
-Automated test suite for verifying ECS system registration, component schemas, Transform sync, Visibility, and ECS lifecycle (pause/step/resume) using the IWER MCP emulator tools.
+All tool calls go through `scripts/mcp-call.mjs` via WebSocket — no MCP server, no permission prompts.
 
-Run all suites in order. Report a summary table at the end with pass/fail per suite.
+**Configuration:**
+- EXAMPLE_DIR: /Users/felixz/Projects/immersive-web-sdk/examples/poke
+- ROOT: /Users/felixz/Projects/immersive-web-sdk
 
-## Server Lifecycle
+**SHORTHAND**: Throughout this document, `MCPCALL` means:
+```
+node /Users/felixz/Projects/immersive-web-sdk/scripts/mcp-call.mjs --port <PORT>
+```
+where `<PORT>` is the port number discovered in Step 2.
 
-### Start the dev server (if not already running)
-
-```bash
-cd examples/poke && npm run dev &
+**Tool calling pattern**: Every tool call is a Bash command using the MCPCALL shorthand:
+```
+MCPCALL --tool <TOOL_NAME> --args '<JSON_ARGS>' 2>/dev/null
 ```
 
-Wait for port 8081 to be ready:
-```bash
-for i in $(seq 1 30); do lsof -i :8081 -sTCP:LISTEN > /dev/null 2>&1 && break; sleep 1; done
-```
+- `<TOOL_NAME>` uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`). The script handles translation internally.
+- `<JSON_ARGS>` is a JSON object string. Omit `--args` if no arguments needed.
+- Output is JSON on stdout. Parse it to check assertions.
+- Use `--timeout 20000` for operations that may take longer (reload, accept_session, screenshot).
+- Always append `2>/dev/null` to suppress TLS warnings.
 
-### At the end of all tests, kill the dev server
+**IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple mcp-call commands together.
 
-```bash
-kill $(lsof -t -i :8081) 2>/dev/null
-```
-
-## Pre-test Setup
-
-```
-mcp__iwsdk-dev-mcp__browser_reload_page
-mcp__iwsdk-dev-mcp__xr_accept_session
-mcp__iwsdk-dev-mcp__browser_get_console_logs(level: ["error", "warn"]) → must be empty
-```
+**IMPORTANT**: When the instructions say "wait N seconds", use `sleep N` as a separate Bash command.
 
 ---
 
-## Test Suites
+## Step 1: Install Dependencies
+
+```bash
+cd /Users/felixz/Projects/immersive-web-sdk/examples/poke && npm run fresh:install
+```
+
+Wait for this to complete before proceeding.
+
+---
+
+## Step 2: Start Dev Server
+
+Start the dev server as a background task using the Bash tool's `run_in_background: true` parameter:
+
+```bash
+cd /Users/felixz/Projects/immersive-web-sdk/examples/poke && npm run dev
+```
+
+**IMPORTANT**: This command MUST be run with `run_in_background: true` on the Bash tool — do NOT append `&` to the command itself.
+
+Once the background task is launched, poll the output for Vite's ready message (up to 60s). Read the task output or use `tail` to watch for a line containing `Local:`. The output will contain a URL like `https://localhost:5173/`. Extract the port number from this URL and save it as `<PORT>`. All subsequent `MCPCALL` commands use this port.
+
+If the server fails to start within 60 seconds, report FAIL for all suites and skip to Step 5.
+
+---
+
+## Step 3: Verify Connectivity
+
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
+```
+
+This must return JSON with a list of systems. If it fails:
+1. Check the dev server output for errors
+2. Try killing and restarting the server (Step 2)
+3. If it still fails, report FAIL for all suites and skip to Step 5
+
+---
+
+## Step 4: Run Test Suites
+
+### Pre-test Setup
+
+Run these commands in order:
+
+1. `MCPCALL --tool browser_reload_page --timeout 20000 2>/dev/null`
+   Then: `sleep 3`
+
+2. `MCPCALL --tool xr_accept_session --timeout 20000 2>/dev/null`
+   Then: `sleep 2`
+
+3. `MCPCALL --tool browser_get_console_logs --args '{"level":["error","warn"]}' 2>/dev/null`
+   Assert: result should be empty or have no errors/warnings
+
+---
 
 ### Suite 1: System Registration
 
-**What we're testing**: All expected systems are registered with correct priorities and config keys.
+**Test 1.1: List All Systems**
 
-#### Test 1.1: List All Systems
-
-```
-mcp__iwsdk-dev-mcp__ecs_list_systems
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
 ```
 
-**Assert** — Framework systems present with priorities:
+Assert these framework systems are present with correct priorities:
 
-| System | Priority | Required Config Keys |
-|--------|----------|---------------------|
-| `LocomotionSystem` | -5 | `useWorker`, `slidingSpeed`, `turningMethod`, `enableJumping`, ... |
-| `InputSystem` | -4 | (none) |
-| `GrabSystem` | -3 | `useHandPinchForGrab` |
-| `TransformSystem` | 0 | (none) |
-| `VisibilitySystem` | 0 | (none) |
-| `EnvironmentSystem` | 0 | (none) |
-| `LevelSystem` | 0 | `defaultLighting` |
-| `AudioSystem` | 0 | `enableDistanceCulling`, `cullingDistanceMultiplier` |
-| `PanelUISystem` | 0 | `forwardHtmlEvents`, `kits`, `preferredColorScheme` |
+| System | Priority |
+|--------|----------|
+| `LocomotionSystem` | -5 |
+| `InputSystem` | -4 |
+| `GrabSystem` | -3 |
+| `TransformSystem` | 0 |
+| `VisibilitySystem` | 0 |
+| `EnvironmentSystem` | 0 |
+| `LevelSystem` | 0 |
+| `AudioSystem` | 0 |
+| `PanelUISystem` | 0 |
 
-**Note**: Systems with priority < 0 run first. Among priority-0 systems, order is determined by registration order.
-
-#### Test 1.2: Verify Query Entity Counts
-
-```
-InputSystem.entityCounts:
-  rayInteractables: ≥ 1
-  pokeInteractables: ≥ 1
-TransformSystem.entityCounts:
-  transform: ≥ 5 (all entities have Transform)
-LevelSystem.entityCounts:
-  levelEntities: ≥ 4 (all non-persistent entities have LevelTag)
-```
+Also verify entity counts:
+- InputSystem: `rayInteractables >= 1`, `pokeInteractables >= 1`
+- TransformSystem: `transform >= 5`
+- LevelSystem: `levelEntities >= 4`
 
 ---
 
 ### Suite 2: Component Registration
 
-**What we're testing**: All expected components are registered with correct field schemas.
+**Test 2.1: List All Components**
 
-#### Test 2.1: List All Components
-
-```
-mcp__iwsdk-dev-mcp__ecs_list_components
+```bash
+MCPCALL --tool ecs_list_components 2>/dev/null
 ```
 
-**Assert** — key components present with expected fields:
+Assert these components are present:
+- `Transform` with fields: `position` (Vec3), `orientation` (Vec4), `scale` (Vec3), `parent` (Entity)
+- `Visibility` with field: `isVisible` (Boolean, default: true)
+- `LevelRoot` (no fields — marker)
+- `LevelTag` with field: `id` (String)
+- `PanelUI` with fields: `config` (String), `maxWidth` (Float32), `maxHeight` (Float32)
+- `AudioSource` with fields: `src` (FilePath), `volume` (Float32)
 
-| Component | Key Fields |
-|-----------|-----------|
-| `Transform` | `position` (Vec3), `orientation` (Vec4), `scale` (Vec3), `parent` (Entity) |
-| `Visibility` | `isVisible` (Boolean, default: true) |
-| `LevelRoot` | (no fields — marker) |
-| `LevelTag` | `id` (String) |
-| `DomeGradient` | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32) |
-| `IBLGradient` | `sky` (Color), `equator` (Color), `ground` (Color), `intensity` (Float32) |
-| `PanelUI` | `config` (String), `maxWidth` (Float32), `maxHeight` (Float32) |
-| `AudioSource` | `src` (FilePath), `volume` (Float32), `_isPlaying` (Boolean), `_loaded` (Boolean) |
-
-#### Test 2.2: Transform Default Values
-
-```
-Transform fields:
-  position default: [NaN, NaN, NaN]  — preserves Object3D's existing value
-  orientation default: [NaN, NaN, NaN, NaN]
-  scale default: [NaN, NaN, NaN]
-  parent default: undefined
-```
+**Test 2.2: Transform Default Values**
+From the ecs_list_components output, verify Transform field defaults:
+- `position` default: `[NaN, NaN, NaN]`
+- `orientation` default: `[NaN, NaN, NaN, NaN]`
+- `scale` default: `[NaN, NaN, NaN]`
 
 ---
 
-### Suite 3: Transform Sync (ECS ↔ Object3D)
+### Suite 3: Transform Sync (ECS <-> Object3D)
 
-**What we're testing**: Modifying Transform component values via ECS immediately updates the Object3D in Three.js (zero-copy sync).
+**Test 3.1: Modify Transform Position**
 
-#### Test 3.1: Modify Transform Position
+1. Find an entity with LevelTag:
+   ```bash
+   MCPCALL --tool ecs_find_entities --args '{"withComponents":["LevelTag"]}' 2>/dev/null
+   ```
+   Pick the first entity's `entityIndex`.
 
-1. Find an entity with a Transform component:
-   `mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["LevelTag"])` → pick the first entity
-2. Get its Object3D UUID from `mcp__iwsdk-dev-mcp__scene_get_hierarchy(maxDepth: 3)` — find the node matching the entity index.
-3. Record initial position:
-   `mcp__iwsdk-dev-mcp__scene_get_object_transform(uuid: "<entity-uuid>")` → note localPosition
-4. Change position via ECS:
-   `mcp__iwsdk-dev-mcp__ecs_set_component(entityIndex: <N>, componentId: "Transform", field: "position", value: "[0, 2, -1]")`
+2. Get the scene hierarchy to find the entity's Object3D UUID:
+   ```bash
+   MCPCALL --tool scene_get_hierarchy --args '{"maxDepth":3}' 2>/dev/null
+   ```
+   Find the node matching the entity index.
+
+3. Get initial transform:
+   ```bash
+   MCPCALL --tool scene_get_object_transform --args '{"uuid":"<UUID>"}' 2>/dev/null
+   ```
+
+4. Set position via ECS:
+   ```bash
+   MCPCALL --tool ecs_set_component --args '{"entityIndex":<N>,"componentId":"Transform","field":"position","value":"[0, 2, -1]"}' 2>/dev/null
+   ```
+
 5. Verify Object3D moved:
-   `mcp__iwsdk-dev-mcp__scene_get_object_transform(uuid: "<entity-uuid>")` → localPosition must be [0, 2, -1]
-
-**Assert**: The Object3D's `localPosition` matches the value set via `ecs_set_component`.
+   ```bash
+   MCPCALL --tool scene_get_object_transform --args '{"uuid":"<UUID>"}' 2>/dev/null
+   ```
+   Assert: `localPosition` matches `[0, 2, -1]` (within tolerance of 0.01).
 
 ---
 
 ### Suite 4: ECS Pause / Step / Resume
 
-#### Test 4.1: Pause
+**Test 4.1: Pause**
+```bash
+MCPCALL --tool ecs_pause 2>/dev/null
+```
+Assert: `paused === true`, `systemCount >= 12`
 
+**Test 4.2: Step**
+```bash
+MCPCALL --tool ecs_step --args '{"count":5}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_pause
-→ { paused: true, frame: <N>, systemCount: ≥ 12 }
-```
+Assert: `framesAdvanced === 5`
 
-#### Test 4.2: Step
-
+**Test 4.3: Resume**
+```bash
+MCPCALL --tool ecs_resume 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_step(count: 5)
-→ { framesAdvanced: 5, totalFrame: <N+5> }
-```
-
-#### Test 4.3: Resume
-
-```
-mcp__iwsdk-dev-mcp__ecs_resume
-→ { paused: false, framesWhilePaused: <N> }
-```
+Assert: `paused === false`
 
 ---
 
 ### Suite 5: System Toggle
 
-#### Test 5.1: Pause a System
+**Test 5.1: Pause a System**
+```bash
+MCPCALL --tool ecs_toggle_system --args '{"name":"GrabSystem","paused":true}' 2>/dev/null
+```
+Assert: `isPaused === true`
 
+**Test 5.2: Resume a System**
+```bash
+MCPCALL --tool ecs_toggle_system --args '{"name":"GrabSystem","paused":false}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_toggle_system(name: "GrabSystem", paused: true)
-→ { name: "GrabSystem", isPaused: true }
-```
-
-#### Test 5.2: Resume a System
-
-```
-mcp__iwsdk-dev-mcp__ecs_toggle_system(name: "GrabSystem", paused: false)
-→ { name: "GrabSystem", isPaused: false }
-```
+Assert: `isPaused === false`
 
 ---
 
 ### Suite 6: Entity Discovery
 
-#### Test 6.1: Find by Component
-
+**Test 6.1: Find by Component**
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["LevelRoot"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["LevelRoot"])
-→ Exactly 1 entity (the level root)
+Assert: exactly 1 entity
 
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["Transform"])
-→ All entities (every entity has Transform)
-
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["LevelTag"])
-→ All non-persistent entities
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["Transform"]}' 2>/dev/null
 ```
+Assert: returns entities (count >= 5)
 
-#### Test 6.2: Find by Name Pattern
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["LevelTag"]}' 2>/dev/null
+```
+Assert: returns entities (count >= 4)
 
+**Test 6.2: Find by Name Pattern**
+```bash
+MCPCALL --tool ecs_find_entities --args '{"namePattern":"LevelRoot"}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_find_entities(namePattern: "LevelRoot")
-→ Matches entity with name "LevelRoot"
-```
+Assert: matches entity named "LevelRoot"
 
-#### Test 6.3: Exclude Components
-
+**Test 6.3: Exclude Components**
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["Transform"],"withoutComponents":["LevelTag"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["Transform"], withoutComponents: ["LevelTag"])
-→ Only persistent entities (scene root entity 0)
-```
+Assert: returns only persistent entities (fewer than the full Transform set)
 
 ---
 
 ### Suite 7: Snapshot & Diff
 
-#### Test 7.1: Snapshot
-
+**Test 7.1: Snapshot**
+```bash
+MCPCALL --tool ecs_snapshot --args '{"label":"baseline"}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_snapshot(label: "baseline")
-→ { label: "baseline", entityCount: ≥ 5, componentCount: ≥ 20 }
-```
+Assert: `entityCount >= 5`, `componentCount >= 20`
 
-#### Test 7.2: Modify and Diff
+**Test 7.2: Modify and Diff**
 
-1. Find an entity with `LevelTag` via `ecs_find_entities(withComponents: ["LevelTag"])`. Use its `entityIndex`.
-2. Modify its Transform:
-   `mcp__iwsdk-dev-mcp__ecs_set_component(entityIndex: <found>, componentId: "Transform", field: "position", value: "[1, 1, 1]")`
-3. Snapshot and diff:
+1. Find an entity with LevelTag:
+   ```bash
+   MCPCALL --tool ecs_find_entities --args '{"withComponents":["LevelTag"]}' 2>/dev/null
    ```
-   mcp__iwsdk-dev-mcp__ecs_snapshot(label: "modified")
-   mcp__iwsdk-dev-mcp__ecs_diff(from: "baseline", to: "modified")
-   → Shows entity's Transform.position changed to [1, 1, 1]
+
+2. Set its position:
+   ```bash
+   MCPCALL --tool ecs_set_component --args '{"entityIndex":<N>,"componentId":"Transform","field":"position","value":"[1, 1, 1]"}' 2>/dev/null
    ```
+
+3. Take second snapshot:
+   ```bash
+   MCPCALL --tool ecs_snapshot --args '{"label":"modified"}' 2>/dev/null
+   ```
+
+4. Diff:
+   ```bash
+   MCPCALL --tool ecs_diff --args '{"from":"baseline","to":"modified"}' 2>/dev/null
+   ```
+   Assert: diff shows Transform.position changed to `[1, 1, 1]`
 
 ---
 
 ### Suite 8: Stability
 
+```bash
+MCPCALL --tool browser_get_console_logs --args '{"count":30,"level":["error","warn"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_get_console_logs(count: 30, level: ["error", "warn"])
-→ Must return empty
-```
+Assert: No application-level errors or warnings. Pre-existing 404 resource errors from page load are acceptable.
 
 ---
 
-## Results Summary
+## Step 5: Cleanup & Results
+
+Kill the dev server:
+```bash
+kill $(lsof -t -i :<PORT>) 2>/dev/null
+```
+
+Output a summary table:
 
 ```
 | Suite                    | Result    |
@@ -259,33 +314,35 @@ mcp__iwsdk-dev-mcp__browser_get_console_logs(count: 30, level: ["error", "warn"]
 | 8. Stability             | PASS/FAIL |
 ```
 
-If any suite fails, include details about which assertion failed and the actual vs expected values.
+If any suite fails, include which assertion failed and actual vs expected values.
+
+---
+
+## Recovery
+
+If at any point a transient error occurs (server crash, WebSocket timeout, connection refused, etc.) that is NOT caused by a source code bug:
+1. Kill the dev server: `kill $(lsof -t -i :<PORT>) 2>/dev/null`
+2. Restart: re-run Step 2 to start a fresh dev server (port may change)
+3. Re-run the Pre-test Setup (reload, accept session)
+4. Retry the failed suite
+
+Only give up after one retry attempt per suite. If the same suite fails twice, mark it FAIL and continue to the next suite.
 
 ---
 
 ## Known Issues & Workarounds
 
 ### Transform NaN defaults
-Transform fields default to `[NaN, NaN, NaN]` — this is by design. When an entity has an Object3D with existing transforms, adding the Transform component preserves those values. The NaN sentinel means "don't overwrite".
+Transform fields default to `[NaN, NaN, NaN]` — by design. NaN sentinel means "don't overwrite existing Object3D value".
 
 ### UUIDs change on reload
-Three.js Object3D UUIDs are regenerated on every page reload. Always call `scene_get_hierarchy` after reload to get fresh UUIDs.
+Three.js Object3D UUIDs regenerate on page reload. Always call `scene_get_hierarchy` after reload.
 
 ### ecs_step timeout
-`ecs_step` has a 5-second timeout per step. If the render loop is inactive (e.g., tab not focused), steps may fail.
+`ecs_step` has a 5-second timeout per step. If render loop is inactive, steps may fail.
 
 ### Entity indices change on reload
-Never cache entity indices across page reloads. Always re-discover via `ecs_find_entities`.
+Never cache entity indices across reloads. Always re-discover via `ecs_find_entities`.
 
-## Architecture Notes
-
-### System Priority Ordering
-Lower priority numbers run first. Framework systems use negative priorities (-5 to -1) to ensure they run before user systems (priority 0+).
-
-### Transform Zero-Copy Sync
-The Transform component replaces `Object3D.position`, `Object3D.quaternion`, and `Object3D.scale` with `SyncedVector3`/`SyncedQuaternion` instances that read/write directly from the ECS `Float32Array` storage.
-
-### ECS Pause vs System Toggle
-- `ecs_pause`: Stops ALL systems, render loop continues for screenshots
-- `ecs_toggle_system`: Stops ONE system, all others keep running
-- `ecs_step`: Only works while globally paused, advances N frames with fixed delta
+### Console log noise
+Some warnings (e.g., TLS self-signed cert) are expected and should be ignored. Only check for application-level errors/warnings.

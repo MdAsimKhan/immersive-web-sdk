@@ -1,269 +1,242 @@
 ---
 name: test-all
-description: Master orchestrator that runs ALL 9 test skills in parallel across all examples. Handles the full lifecycle — prerequisites check, build, example setup, dev servers, sub-Claude test sessions, polling, cleanup, and aggregate reporting. Each test gets its own example directory and dev server for maximum parallelism.
-disable-model-invocation: true
+description: "Parallel test orchestrator. Runs all 9 test suites concurrently via Task sub-agents and mcp-call.mjs. Handles build, example setup, dev servers, agent launch, polling, retries, and result aggregation."
+argument-hint: "[--skip <test-name>] [--only <test-name>]"
 ---
 
-# Test All — Full Parallel QA Orchestrator
+# Test All — Parallel Orchestrator
 
-Runs all 9 test skills simultaneously, each in its own example directory with its own dev server and MCP connection. Produces an aggregate pass/fail summary.
+Runs all 9 IWSDK test suites simultaneously. The orchestrator handles the full lifecycle: build, example prep, dev servers, sub-agent launch, polling, retries, cleanup, and aggregate reporting.
 
-**Estimated wall-clock time:** ~10 minutes
-**Estimated cost:** ~$20 (9 parallel sub-Claude sessions)
+Each test gets its own example directory and dev server. Sub-agents read the skill files and execute tests via `mcp-call.mjs` WebSocket CLI.
 
 ---
 
-## Phase 1: Prerequisites
+## Test Map
 
-Verify tooling before doing anything else.
+| Agent | Example Dir | Suites | Skill File |
+|-------|------------|--------|------------|
+| test-interactions | examples/poke | 12 | test-interactions/SKILL.md |
+| test-ecs-core | examples/poke-ecs | 8 | test-ecs-core/SKILL.md |
+| test-environment | examples/poke-environment | 6 | test-environment/SKILL.md |
+| test-level | examples/poke-level | 5 | test-level/SKILL.md |
+| test-ui | examples/poke-ui | 5 | test-ui/SKILL.md |
+| test-audio | examples/audio | 6 | test-audio/SKILL.md |
+| test-grab | examples/grab | 5 | test-grab/SKILL.md |
+| test-locomotion | examples/locomotion | 6 | test-locomotion/SKILL.md |
+| test-physics | examples/physics | 5 | test-physics/SKILL.md |
+
+Ports are **not** pre-assigned. Each dev server picks its own port dynamically. The orchestrator discovers each port from the server's log output.
+
+---
+
+## Phase 1: Prerequisites & Build
 
 ```bash
-NODE_VERSION=$(node --version 2>/dev/null | sed 's/v//')
-if [ -z "$NODE_VERSION" ]; then
-  echo "ERROR: node is not installed"; exit 1
-fi
-MAJOR=$(echo $NODE_VERSION | cut -d. -f1)
-MINOR=$(echo $NODE_VERSION | cut -d. -f2)
-if [ "$MAJOR" -lt 20 ] || ([ "$MAJOR" -eq 20 ] && [ "$MINOR" -lt 19 ]); then
-  echo "ERROR: node >= 20.19.0 required, found $NODE_VERSION"; exit 1
-fi
-echo "node $NODE_VERSION OK"
-
-pnpm --version > /dev/null 2>&1 || { echo "ERROR: pnpm is not installed"; exit 1; }
-echo "pnpm $(pnpm --version) OK"
+node -v
 ```
 
-**Stop on failure** — do not proceed without correct tooling.
+```bash
+pnpm -v
+```
 
----
-
-## Phase 2: Build
-
-From the repository root:
+Verify node >= 20.19.0 and pnpm is available. Stop on failure.
 
 ```bash
 pnpm install
+```
+
+```bash
+cd packages/vite-plugin-dev && npx playwright install chromium && cd ../..
+```
+
+```bash
 pnpm build:tgz
 ```
 
-Both must succeed. **Stop on failure.**
+All must succeed. **Stop on failure.** Note: `npx playwright` must run from `packages/vite-plugin-dev` where playwright is a dependency.
 
 ---
 
-## Phase 3: Prepare Example Directories
+## Phase 2: Prepare Examples
 
-### 3a: Clone 4 copies of poke
+### Clone poke for tests that share it
 
-Each poke-based test needs its own directory so all 9 tests can run in parallel (each needs its own dev server and MCP connection).
-
-```bash
-for variant in poke-ecs poke-environment poke-level poke-ui; do
-  rsync -a --exclude='node_modules' --exclude='package-lock.json' --exclude='dist' \
-    examples/poke/ examples/$variant/
-done
-```
-
-This takes ~1 second per copy (excludes heavy directories).
-
-### 3b: Fresh install all 9 examples in parallel
+5 tests use the poke example. Clone it into separate directories so each gets its own dev server:
 
 ```bash
-for dir in poke poke-ecs poke-environment poke-level poke-ui audio grab locomotion physics; do
-  (cd examples/$dir && npm run fresh:install) &
-done
-wait
+node scripts/test-prep.mjs clone
 ```
 
-All 9 install concurrently. Wait for all to complete before proceeding.
-
----
-
-## Phase 4: Launch 9 Dev Servers
-
-Start all dev servers in background. Vite auto-assigns ports (8081, 8082, ...). The `iwsdkDev` vite plugin writes the actual port into each example's `.mcp.json`.
-
-**IMPORTANT:** Use `pwd` to capture the repo root as an absolute path (`ROOT`), then use `$ROOT` for all file existence checks. This prevents cwd drift across separate Bash tool invocations from causing false negatives.
+### Fresh install all 9 examples in parallel
 
 ```bash
-ROOT=$(pwd)
-for dir in poke poke-ecs poke-environment poke-level poke-ui audio grab locomotion physics; do
-  rm -f "$ROOT/examples/$dir/.mcp.json"
-  (cd "$ROOT/examples/$dir" && npm run dev > /tmp/dev-$dir.log 2>&1) &
-done
-```
-
-Wait 15 seconds for dev servers to start, then manually verify each `.mcp.json` exists:
-
-```bash
-sleep 15
-```
-
-After the sleep, use `ls -la` to check each file individually — do NOT use a script or loop. Just run:
-
-```bash
-ls -la examples/poke/.mcp.json examples/poke-ecs/.mcp.json examples/poke-environment/.mcp.json examples/poke-level/.mcp.json examples/poke-ui/.mcp.json examples/audio/.mcp.json examples/grab/.mcp.json examples/locomotion/.mcp.json examples/physics/.mcp.json
-```
-
-All 9 should appear. If any are missing, wait another 10 seconds and check the missing ones again. If still missing after that, check the dev server log (`/tmp/dev-<name>.log`) for that example and stop.
-
----
-
-## Phase 5: Launch 9 Sub-Claude Tests
-
-Launch all 9 simultaneously as background processes. **IMPORTANT:** Use subshells `(cd ... && ...)` so the working directory stays at the repo root — bare `cd` would shift the cwd and break relative paths in later phases.
-
-```bash
-# Poke-based tests (each in its own clone)
-(cd examples/poke && unset CLAUDECODE && claude -p "/test-interactions" --max-turns 300 --output-format json > /tmp/test-interactions.json 2>&1) &
-(cd examples/poke-ecs && unset CLAUDECODE && claude -p "/test-ecs-core" --max-turns 80 --output-format json > /tmp/test-ecs-core.json 2>&1) &
-(cd examples/poke-environment && unset CLAUDECODE && claude -p "/test-environment" --max-turns 60 --output-format json > /tmp/test-environment.json 2>&1) &
-(cd examples/poke-level && unset CLAUDECODE && claude -p "/test-level" --max-turns 60 --output-format json > /tmp/test-level.json 2>&1) &
-(cd examples/poke-ui && unset CLAUDECODE && claude -p "/test-ui" --max-turns 60 --output-format json > /tmp/test-ui.json 2>&1) &
-
-# Feature-specific tests
-(cd examples/audio && unset CLAUDECODE && claude -p "/test-audio" --max-turns 60 --output-format json > /tmp/test-audio.json 2>&1) &
-(cd examples/grab && unset CLAUDECODE && claude -p "/test-grab" --max-turns 80 --output-format json > /tmp/test-grab.json 2>&1) &
-(cd examples/locomotion && unset CLAUDECODE && claude -p "/test-locomotion" --max-turns 80 --output-format json > /tmp/test-locomotion.json 2>&1) &
-(cd examples/physics && unset CLAUDECODE && claude -p "/test-physics" --max-turns 60 --output-format json > /tmp/test-physics.json 2>&1) &
-```
-
-### Turn limits (calibrated from live testing)
-
-| Test Skill | Max Turns | Observed Turns | Rationale |
-|---|---|---|---|
-| test-interactions | 300 | 101 (hit limit at 100) | 12 suites, many MCP calls, needs headroom under contention |
-| test-ecs-core | 80 | 37 | 8 suites, multi-step sequences |
-| test-environment | 60 | 18 | 6 suites, mostly queries |
-| test-level | 60 | 17 | 5 suites, mostly queries |
-| test-ui | 60 | 20 | 6 suites, queries + screenshot |
-| test-audio | 60 | 34 | 6 suites, play/stop cycles |
-| test-grab | 80 | 54 | 5 suites, complex grab sequences with snapshots |
-| test-locomotion | 80 | 50 | 6 suites, screenshot-heavy |
-| test-physics | 60 | 30 | 5 suites, pause/step sequences |
-
----
-
-## Phase 6: Wait & Poll
-
-### Wait 5 minutes before the first poll
-
-Tests typically complete in 5-10 minutes. Wait 5 minutes before checking.
-
-```bash
-sleep 300
-```
-
-### Then poll every 60 seconds
-
-To poll, manually check the file size of each test output file. A file larger than ~400 bytes means the sub-Claude session has finished and written its JSON output. Do NOT use a Python script — just check manually:
-
-```bash
-ls -la /tmp/test-interactions.json /tmp/test-ecs-core.json /tmp/test-environment.json /tmp/test-level.json /tmp/test-ui.json /tmp/test-audio.json /tmp/test-grab.json /tmp/test-locomotion.json /tmp/test-physics.json
-```
-
-- A file with size > 400 bytes = **complete** (the sub-Claude session wrote its JSON result)
-- A file with size 0 or very small = **still running**
-
-If all 9 files are > 400 bytes, proceed to Phase 7. Otherwise, wait 60 seconds and check again:
-
-```bash
-sleep 60
-```
-
-Continue polling every 60 seconds until all 9 are done. **Timeout at 25 minutes total** (20 minutes of polling after the initial 5-minute wait).
-
----
-
-## Phase 7: Cleanup & Report
-
-### 7a: Kill all dev servers
-
-```bash
-lsof -i :8081-8100 -sTCP:LISTEN -P 2>/dev/null | awk '{print $2}' | grep -v PID | sort -u | xargs kill 2>/dev/null
-```
-
-### 7b: Delete poke clones
-
-**Use absolute paths** to avoid cwd drift from Phase 5 `cd` commands:
-
-```bash
-ROOT=$(pwd)
-rm -rf "$ROOT/examples/poke-ecs" "$ROOT/examples/poke-environment" "$ROOT/examples/poke-level" "$ROOT/examples/poke-ui"
-```
-
-### 7c: Parse results and print grand summary
-
-Use this **single Python script**:
-
-```python
-python3 -c "
-import json, os
-tests = [
-    ('test-interactions', 'poke'),
-    ('test-ecs-core', 'poke-ecs'),
-    ('test-environment', 'poke-environment'),
-    ('test-level', 'poke-level'),
-    ('test-ui', 'poke-ui'),
-    ('test-audio', 'audio'),
-    ('test-grab', 'grab'),
-    ('test-locomotion', 'locomotion'),
-    ('test-physics', 'physics'),
-]
-print('=' * 75)
-print('GRAND SUMMARY — ALL 9 TEST SKILLS (PARALLEL RUN)')
-print('=' * 75)
-total_pass = 0
-total_cost = 0
-for name, example in tests:
-    f = f'/tmp/{name}.json'
-    try:
-        content = open(f).read()
-        data = json.loads(content[content.find('{'):])
-        r = data.get('result','')
-        turns = data.get('num_turns','?')
-        cost = data.get('total_cost_usd', 0)
-        subtype = data.get('subtype','')
-        total_cost += cost
-        if subtype == 'error_max_turns':
-            status = 'MAX_TURNS'
-        elif 'FAIL' in r:
-            status = 'FAIL'
-        elif 'PASS' in r:
-            status = 'PASS'
-            total_pass += 1
-        elif r:
-            status = 'DONE'
-        else:
-            status = 'EMPTY'
-        pass_c = r.count('**PASS**') + r.count('| PASS')
-        fail_c = r.count('**FAIL**') + r.count('| FAIL')
-        skip_c = r.count('SKIP')
-        suites = f'{pass_c}P'
-        if fail_c: suites += f'/{fail_c}F'
-        if skip_c: suites += f'/{skip_c}S'
-        print(f'{name:20s} | {example:18s} | {status:10s} | {suites:8s} | {turns:>3} turns | \${cost:.2f}')
-    except Exception as e:
-        print(f'{name:20s} | {example:18s} | ERROR      |          |         | {e}')
-print('=' * 75)
-print(f'Result: {total_pass}/9 PASS | Total cost: \${total_cost:.2f}')
-print('=' * 75)
-"
+node scripts/test-prep.mjs install
 ```
 
 ---
 
-## How It Works
+## Phase 3: Start 9 Dev Servers
 
-1. **Each test gets its own directory** — poke is cloned 4 times so all 5 poke-based tests run independently
-2. **Each directory gets its own dev server** — Vite auto-assigns ports (8081, 8082, 8083, ...)
-3. **Each dev server generates its own `.mcp.json`** — the vite plugin writes the actual port
-4. **Each sub-Claude discovers its own `.mcp.json`** — connects to the correct dev server automatically
-5. **No port conflicts** — all 9 run simultaneously without interference
+Start all dev servers, wait for them to be ready, and discover their ports. This single command handles everything — starting servers, polling for `.mcp.json` files, and outputting the port map:
 
-## Key Technical Details
+```bash
+node scripts/test-servers.mjs start
+```
 
-- `unset CLAUDECODE` bypasses the nesting guard that prevents Claude from running inside another Claude session
-- `--output-format json` produces structured output; all intermediate work is captured in the JSON `result` field
-- Polling is done with a simple `ls -la` of the 9 output files — no scripts needed
-- Dev servers are killed by port range, not by PID tracking
-- Poke clones are deleted after tests complete — they are temporary test fixtures
+The output is JSON with the port map: `{"poke": 8084, "poke-ecs": 8082, ...}`. Parse this to get each example's port for Phase 4.
+
+If any server fails to start within 60 seconds, the script reports which ones are missing and exits with code 1. Check `/tmp/iwsdk-dev-<name>.log` for errors.
+
+To re-check ports later without restarting:
+```bash
+node scripts/test-servers.mjs ports
+```
+
+---
+
+## Phase 4: Launch 9 Sub-Agents
+
+For each test, launch a Task sub-agent with `subagent_type: "Bash"`, `mode: "bypassPermissions"`, and `run_in_background: true`.
+
+### Sub-agent prompt template
+
+Each sub-agent gets this prompt (with `<SKILL_FILE>`, `<PORT>`, and `<ROOT>` substituted using the ports discovered from `.mcp.json` in Phase 3):
+
+```
+Read the file at <ROOT>/.claude/skills/<SKILL_FILE> and execute the test instructions
+starting from Step 3 (Verify Connectivity). Steps 1 and 2 have already been completed —
+the dev server is running on port <PORT>.
+
+Use port <PORT> wherever the instructions say <PORT>. The MCPCALL shorthand expands to:
+node <ROOT>/scripts/mcp-call.mjs --port <PORT>
+
+Execute all test suites (Steps 3-4), then do Step 5 (cleanup and results summary).
+Do NOT kill the dev server in cleanup — the parent agent will handle that.
+```
+
+### Launch all 9 agents
+
+Launch all 9 Task agents in a **single message** with multiple Task tool calls. This starts them concurrently.
+
+Save each agent's `task_id` and `output_file` from the tool result. Track them:
+
+```
+agents = {
+  "test-interactions": { task_id: "...", output_file: "...", port: <from .mcp.json>, status: "running" },
+  "test-ecs-core":     { task_id: "...", output_file: "...", port: <from .mcp.json>, status: "running" },
+  ...
+}
+```
+
+---
+
+## Phase 5: Wait for Agents to Complete
+
+After launching all 9 agents, simply wait. The system automatically delivers a completion notification when each agent finishes. **Do NOT poll, do NOT run bash commands to check output files.** Just wait for the notifications.
+
+As each agent completes, note its result (PASS/FAIL and suite counts) from the notification. When all 9 have reported, proceed to Phase 7.
+
+**Hard timeout: 20 minutes total** from Phase 4 start. If any agent hasn't completed by then, use `Read` on its `output_file` to check what happened, then mark it as TIMEOUT and proceed to Phase 7.
+
+---
+
+## Phase 6: Retry Failed Agents
+
+If any agent fails due to a transient error (not a test assertion failure):
+
+1. Use `Task(resume: <task_id>)` to continue the agent with its full context
+2. Wait for its completion notification
+3. If it fails again, mark it FAIL and move on
+
+### Retry limits
+
+- Max 1 retry per agent
+- Only retry transient failures (connection refused, timeout) — not test assertion failures
+
+**IMPORTANT**: Do NOT use improvised bash commands (kill, lsof, etc.) for retries. Use `node scripts/test-servers.mjs stop` and `node scripts/test-servers.mjs start` if a server needs restarting. All bash commands in this skill must be one of the pre-approved `node scripts/...` commands or the Phase 1 build commands.
+
+---
+
+## Phase 7: Results & Cleanup
+
+### Kill all dev servers
+
+```bash
+node scripts/test-servers.mjs stop
+```
+
+### Delete poke clones
+
+```bash
+node scripts/test-prep.mjs cleanup
+```
+
+### Aggregate Results
+
+Collect each agent's summary table from its output file. Print a grand summary:
+
+```
+========================================
+  IWSDK Test Suite — Full Results
+========================================
+
+| Test              | Suites | Result  |
+|-------------------|--------|---------|
+| test-interactions | 12/12  | PASS    |
+| test-ecs-core     |  8/8   | PASS    |
+| test-environment  |  6/6   | PASS    |
+| test-level        |  5/5   | PASS    |
+| test-ui           |  5/6   | PASS    |
+| test-audio        |  6/6   | PASS    |
+| test-grab         |  5/5   | PASS    |
+| test-locomotion   |  6/6   | PASS    |
+| test-physics      |  5/5   | PASS    |
+|-------------------|--------|---------|
+| TOTAL             | 58/59  | 9/9 PASS|
+
+========================================
+```
+
+If any test failed, include the failure details from that agent's output.
+
+---
+
+## Key Design Decisions
+
+### Orchestrator manages dev servers, sub-agents run tests
+Sub-agents (Task tool) cannot run background processes. The orchestrator starts all 9 dev servers, discovers their dynamically-assigned ports from the log output, then launches sub-agents that only execute the test steps. Each sub-agent reads its skill file and starts from Step 3 (Verify Connectivity).
+
+### Dynamic port discovery via `.mcp.json`
+Ports are NOT pre-assigned. Each dev server is started with `npm run dev` and Vite picks an available port automatically. The `iwsdkDev` vite plugin writes the actual port into each example's `.mcp.json` file. The orchestrator reads these files to discover ports — this is machine-generated JSON, more robust than parsing log output.
+
+### Sub-agents read skill files directly
+Each sub-agent reads its SKILL.md at runtime. No extraction or text munging needed — the sub-agent is told to skip Steps 1-2 (already done) and start from Step 3. The port is passed explicitly in the prompt.
+
+### TaskOutput vs file-based polling
+Background Task agents write output to a file. Use `Read` tool on the output_file to check progress. This is more reliable than parsing process stdout.
+
+### Boolean values must be JSON booleans
+When setting boolean fields via `ecs_set_component`, the `value` must be a JSON boolean (`true`), not a string (`"true"`). Strings silently fail to coerce.
+
+---
+
+## Troubleshooting
+
+### Agent finishes but no summary table
+The sub-agent may have hit its turn limit. Check the end of its output for truncation. Relaunch with the same prompt.
+
+### Port already in use
+Run `lsof -i :<PORT>` to find the process. Kill it before relaunching.
+
+### fresh:install fails
+Check that `pnpm build:tgz` succeeded and the tarballs exist in the package directories.
+
+### All agents stuck at "Verify Connectivity"
+The dev servers may not have started. Check `/tmp/iwsdk-dev-*.log` for errors.
+
+### Clone directory already exists
+The rsync command will overwrite existing files. If you need a clean slate, delete the clone directories first.
+
+### Sub-agent can't start dev server
+This is expected — sub-agents cannot run background processes. The orchestrator must start all dev servers before launching sub-agents.

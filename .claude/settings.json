@@ -35,11 +35,15 @@
       "mcp__iwsdk-dev-mcp__ecs_diff",
       "Bash(npm run dev *)",
       "Bash(npm run fresh:dev *)",
+      "Bash(npm run fresh:install *)",
+      "Bash(pnpm install)",
+      "Bash(pnpm build:tgz)",
+      "Bash(pnpm -v)",
       "Bash(lsof *)",
       "Bash(kill *)",
       "Bash(sleep *)",
-      "Bash(claude *)",
-      "Bash(unset *)"
+      "Bash(node *)",
+      "Bash(npx *)"
     ]
   },
   "enableAllProjectMcpServers": true,

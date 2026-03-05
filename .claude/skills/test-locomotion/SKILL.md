@@ -1,249 +1,300 @@
 ---
 name: test-locomotion
-description: Automated end-to-end test for the locomotion system (slide, snap turn, teleport, jump). Targets the locomotion example. Uses dynamic entity discovery. The example already has LocomotionEnvironment, Elevator, and settings panel via GLXF level.
-argument-hint: [--suite slide|turn|teleport|jump|all]
+description: "Test locomotion system (slide, snap turn, teleport, jump) against the locomotion example using mcp-call.mjs WebSocket CLI."
+argument-hint: "[--suite slide|turn|teleport|jump|all]"
 ---
 
 # Locomotion System Test
 
-**Target Example:** `examples/locomotion`
+Run 6 test suites covering slide movement, snap turn, teleport, jump, system registration, and stability.
 
-Automated test suite for verifying slide movement, snap turn, teleport, and jump using the IWER MCP emulator tools.
+All tool calls go through `scripts/mcp-call.mjs` via WebSocket — no MCP server, no permission prompts.
 
-Run all suites in order. Report a summary table at the end with pass/fail per suite.
+**Configuration:**
+- EXAMPLE_DIR: /Users/felixz/Projects/immersive-web-sdk/examples/locomotion
+- ROOT: /Users/felixz/Projects/immersive-web-sdk
 
-## Server Lifecycle
+**SHORTHAND**: Throughout this document, `MCPCALL` means:
+```
+node /Users/felixz/Projects/immersive-web-sdk/scripts/mcp-call.mjs --port <PORT>
+```
+where `<PORT>` is the port number discovered in Step 2.
 
-### Start the dev server (if not already running)
-
-```bash
-cd examples/locomotion && npm run dev &
+**Tool calling pattern**: Every tool call is a Bash command using the MCPCALL shorthand:
+```
+MCPCALL --tool <TOOL_NAME> --args '<JSON_ARGS>' 2>/dev/null
 ```
 
-Wait for port 8081 to be ready:
-```bash
-for i in $(seq 1 30); do lsof -i :8081 -sTCP:LISTEN > /dev/null 2>&1 && break; sleep 1; done
-```
+- `<TOOL_NAME>` uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`, `xr_set_gamepad_state`). The script handles translation internally.
+- `<JSON_ARGS>` is a JSON object string. Omit `--args` if no arguments needed.
+- Output is JSON on stdout. Parse it to check assertions.
+- Use `--timeout 20000` for operations that may take longer (reload, accept_session, screenshot).
+- Always append `2>/dev/null` to suppress TLS warnings.
 
-### At the end of all tests, kill the dev server
+**IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple mcp-call commands together.
 
-```bash
-kill $(lsof -t -i :8081) 2>/dev/null
-```
-
-## About the Locomotion Example
-
-The locomotion example uses a GLXF-based level (`./glxf/Composition.glxf`) with `grabbing: true` and `locomotion: true`. It registers `SettingsSystem` (settings panel) and `ElevatorSystem` (an oscillating platform with the custom `Elevator` component). Entities including `LocomotionEnvironment` are defined in the GLXF composition.
-
-## Pre-test Setup
-
-```
-mcp__iwsdk-dev-mcp__browser_reload_page
-mcp__iwsdk-dev-mcp__xr_accept_session
-mcp__iwsdk-dev-mcp__browser_get_console_logs(level: ["error", "warn"]) → must be empty
-```
-
-### Verify locomotion setup
-
-```
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["LocomotionEnvironment"])
-→ Must return at least 1 entity. Save as <env>.
-```
-
-Inspect the environment entity:
-```
-mcp__iwsdk-dev-mcp__ecs_query_entity(entityIndex: <env>, components: ["LocomotionEnvironment"])
-→ _initialized: true, _envHandle > 0
-```
-
-Verify all locomotion systems are registered:
-```
-mcp__iwsdk-dev-mcp__ecs_list_systems
-→ LocomotionSystem (priority -5)
-→ TurnSystem (priority 0)
-→ SlideSystem (priority 0)
-→ TeleportSystem (priority 0)
-```
+**IMPORTANT**: When the instructions say "wait N seconds", use `sleep N` as a separate Bash command.
 
 ---
 
-## Test Suites
+## Step 1: Install Dependencies
+
+```bash
+cd /Users/felixz/Projects/immersive-web-sdk/examples/locomotion && npm run fresh:install
+```
+
+Wait for this to complete before proceeding.
+
+---
+
+## Step 2: Start Dev Server
+
+Start the dev server as a background task using the Bash tool's `run_in_background: true` parameter:
+
+```bash
+cd /Users/felixz/Projects/immersive-web-sdk/examples/locomotion && npm run dev
+```
+
+**IMPORTANT**: This command MUST be run with `run_in_background: true` on the Bash tool — do NOT append `&` to the command itself.
+
+Once the background task is launched, poll the output for Vite's ready message (up to 60s). Read the task output or use `tail` to watch for a line containing `Local:`. The output will contain a URL like `https://localhost:5173/`. Extract the port number from this URL and save it as `<PORT>`. All subsequent `MCPCALL` commands use this port.
+
+If the server fails to start within 60 seconds, report FAIL for all suites and skip to Step 5.
+
+---
+
+## Step 3: Verify Connectivity
+
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
+```
+
+This must return JSON with a list of systems. If it fails:
+1. Check the dev server output for errors
+2. Try killing and restarting the server (Step 2)
+3. If it still fails, report FAIL for all suites and skip to Step 5
+
+---
+
+## Step 4: Run Test Suites
+
+### Pre-test Setup
+
+Run these commands in order:
+
+1. `MCPCALL --tool browser_reload_page --timeout 20000 2>/dev/null`
+   Then: `sleep 3`
+
+2. `MCPCALL --tool xr_accept_session --timeout 20000 2>/dev/null`
+   Then: `sleep 2`
+
+3. `MCPCALL --tool browser_get_console_logs --args '{"count":20,"level":["error","warn"]}' 2>/dev/null`
+   Assert: No error-level logs.
+
+### Verify Locomotion Setup
+
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["LocomotionEnvironment"]}' 2>/dev/null
+```
+Assert: At least 1 entity. Save as `<env>`.
+
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<env>,"components":["LocomotionEnvironment"]}' 2>/dev/null
+```
+Assert: `_initialized` = true, `_envHandle` > 0.
+
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
+```
+Assert:
+- LocomotionSystem (priority -5)
+- TurnSystem (priority 0)
+- SlideSystem (priority 0)
+- TeleportSystem (priority 0)
+
+---
+
+### Input Mapping Reference
+
+| Action | Controller | Input | Tool |
+|--------|-----------|-------|------|
+| Slide forward | Left | Thumbstick Y = -1 | `xr_set_gamepad_state` axes `[{0, 0}, {1, -1}]` |
+| Slide backward | Left | Thumbstick Y = 1 | `xr_set_gamepad_state` axes `[{0, 0}, {1, 1}]` |
+| Snap turn right | Right | Thumbstick X = 1 (edge) | `xr_set_gamepad_state` axes `[{0, 1}, {1, 0}]` |
+| Snap turn left | Right | Thumbstick X = -1 (edge) | `xr_set_gamepad_state` axes `[{0, -1}, {1, 0}]` |
+| Teleport activate | Right | Thumbstick Y = 1 (down) | `xr_set_gamepad_state` axes `[{0, 0}, {1, 1}]` |
+| Jump | Right | A button (index 3) | `xr_set_gamepad_state` buttons `[{3, 1, true}]` |
+
+---
 
 ### Suite 1: Slide Movement (Left Thumbstick)
 
-**What we're testing**: Left thumbstick forward/back/strafe causes player position to change.
-
-**Observation method**: Locomotion moves the XR origin, NOT the headset. Verify movement via **screenshots** (scene appears to move).
-
-#### Test 1.1: Slide Forward
-
+**Test 1.1: Slide Forward**
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_screenshot  → save as "before slide"
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-left",
-  axes: [{index: 0, value: 0}, {index: 1, value: -1}])
+Save as "before slide".
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-left","axes":[{"index":0,"value":0},{"index":1,"value":-1}]}' 2>/dev/null
 ```
-
-Wait ~1 second for movement to accumulate.
-
+Then: `sleep 1`
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_screenshot → save as "after slide"
+Save as "after slide".
+
+Assert: Screenshots show scene moving closer (player moved forward).
+
+**Test 1.2: Stop Sliding**
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-left","axes":[{"index":0,"value":0},{"index":1,"value":0}]}' 2>/dev/null
 ```
+Assert: Player stops moving (subsequent screenshots are identical).
 
-**Assert**: Screenshots show scene moving closer (player moved forward).
-
-#### Test 1.2: Stop Sliding
-
+**Test 1.3: Slide Backward**
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-left","axes":[{"index":0,"value":0},{"index":1,"value":1}]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-left",
-  axes: [{index: 0, value: 0}, {index: 1, value: 0}])
+Then: `sleep 1`
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
+Assert: Scene moves away (player retreated).
 
-**Assert**: Player stops moving (subsequent screenshots are identical).
-
-#### Test 1.3: Slide Backward
-
+Release:
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-left","axes":[{"index":0,"value":0},{"index":1,"value":0}]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-left",
-  axes: [{index: 0, value: 0}, {index: 1, value: 1}])
-```
-
-Wait ~1 second, then screenshot.
-
-**Assert**: Scene moves away (player retreated).
-
-Release: `axes: [{index: 0, value: 0}, {index: 1, value: 0}]`
 
 ---
 
 ### Suite 2: Snap Turn (Right Thumbstick Left/Right)
 
-**What we're testing**: Right thumbstick left or right triggers a 45-degree snap rotation. Edge-triggered.
-
-#### Test 2.1: Snap Turn Right
-
+**Test 2.1: Snap Turn Right**
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_screenshot → save as "before turn"
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  axes: [{index: 0, value: 1}, {index: 1, value: 0}])
+Save as "before turn".
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","axes":[{"index":0,"value":1},{"index":1,"value":0}]}' 2>/dev/null
 ```
-
-Wait ~0.3s.
-
+Then: `sleep 0.3`
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_screenshot → save as "after turn right"
-```
+Save as "after turn right".
 
-**Assert**: View rotated ~45 degrees clockwise.
+Assert: View rotated ~45 degrees clockwise.
 
-#### Test 2.2: Release + Snap Turn Left
+**Test 2.2: Release + Snap Turn Left**
 
 **IMPORTANT**: Must release first for edge trigger reset.
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","axes":[{"index":0,"value":0},{"index":1,"value":0}]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  axes: [{index: 0, value: 0}, {index: 1, value: 0}])
+Then: `sleep 0.3`
+
+Push left:
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","axes":[{"index":0,"value":-1},{"index":1,"value":0}]}' 2>/dev/null
 ```
-
-Wait ~0.3s, then push left:
+Then: `sleep 0.3`
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  axes: [{index: 0, value: -1}, {index: 1, value: 0}])
+Assert: View rotated ~45 degrees counter-clockwise (back to roughly original heading).
+
+Release thumbstick:
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","axes":[{"index":0,"value":0},{"index":1,"value":0}]}' 2>/dev/null
 ```
-
-Wait ~0.3s, then screenshot.
-
-**Assert**: View rotated ~45 degrees counter-clockwise (back to roughly original heading).
-
-Release thumbstick after test.
 
 ---
 
 ### Suite 3: Teleport (Right Thumbstick Down)
 
-**What we're testing**: Right thumbstick down activates teleport arc. Release confirms teleport.
-
 **Precondition**: The right controller must NOT be pointing at any interactable entity.
 
-#### Test 3.1: Setup — Point Controller at Floor
-
-```
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-right",
-  position: {x: 0.25, y: 1.5, z: -0.3},
-  orientation: {pitch: -45, roll: 0, yaw: 0})
+**Test 3.1: Setup — Point Controller at Floor**
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":0.25,"y":1.5,"z":-0.3},"orientation":{"pitch":-45,"roll":0,"yaw":0}}' 2>/dev/null
 ```
 
-#### Test 3.2: Activate Teleport Arc
-
+**Test 3.2: Activate Teleport Arc**
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_screenshot → save as "before teleport"
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  axes: [{index: 0, value: 0}, {index: 1, value: 1}])
+Save as "before teleport".
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","axes":[{"index":0,"value":0},{"index":1,"value":1}]}' 2>/dev/null
 ```
+Then: `sleep 1`
 
-Wait ~1 second.
-
-#### Test 3.3: Release to Teleport
-
+**Test 3.3: Release to Teleport**
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","axes":[{"index":0,"value":0},{"index":1,"value":0}]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  axes: [{index: 0, value: 0}, {index: 1, value: 0}])
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-
-Wait ~0.5s, then screenshot.
-
-**Assert**: Player position changed (view is from a different location).
+Assert: Player position changed (view is from a different location).
 
 ---
 
 ### Suite 4: Jump (A Button on Right Controller)
 
-#### Test 4.1: Press A Button
-
+**Test 4.1: Press A Button**
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","buttons":[{"index":3,"value":1,"touched":true}]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  buttons: [{index: 3, value: 1, touched: true}])
+Then: `sleep 0.3`
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-
-Wait ~0.3s, take screenshot.
-
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","buttons":[{"index":3,"value":0,"touched":false}]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  buttons: [{index: 3, value: 0, touched: false}])
-```
-
-**Assert**: View may show momentary elevation change.
+Assert: View may show momentary elevation change.
 
 ---
 
 ### Suite 5: System Registration & Config
 
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_list_systems
-```
-
-**Assert**:
+Assert:
 - `LocomotionSystem` at priority -5
 - `TurnSystem` at priority 0 with config keys: `turningMethod`, `turningAngle`, `turningSpeed`
 - `SlideSystem` at priority 0 with config keys: `locomotor`, `maxSpeed`, `comfortAssist`, `jumpButton`, `enableJumping`
 - `TeleportSystem` at priority 0 with config keys: `rayGravity`, `locomotor`
 
-Also verify the `Elevator` component and `ElevatorSystem` are registered (example-specific):
+Verify `Elevator` component and `ElevatorSystem`:
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["Elevator"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["Elevator"])
-→ At least 1 entity (the oscillating platform)
-```
+Assert: At least 1 entity (the oscillating platform).
 
 ---
 
 ### Suite 6: Stability
 
+```bash
+MCPCALL --tool browser_get_console_logs --args '{"count":30,"level":["error","warn"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_get_console_logs(count: 30, level: ["error", "warn"])
-→ Must return empty
-```
+Assert: No application-level errors or warnings. Pre-existing 404 resource errors from page load are acceptable.
 
 ---
 
-## Results Summary
+## Step 5: Cleanup & Results
+
+Kill the dev server:
+```bash
+kill $(lsof -t -i :<PORT>) 2>/dev/null
+```
+
+Output a summary table:
 
 ```
 | Suite                     | Result    |
@@ -256,21 +307,21 @@ mcp__iwsdk-dev-mcp__browser_get_console_logs(count: 30, level: ["error", "warn"]
 | 6. Stability              | PASS/FAIL |
 ```
 
-If any suite fails, include details about which assertion failed and the actual vs expected values.
+If any suite fails, include which assertion failed and actual vs expected values.
 
 ---
 
-## Input Mapping Reference
+## Recovery
 
-| Action | Controller | Input | IWER Tool |
-|--------|-----------|-------|-----------|
-| Slide forward | Left | Thumbstick Y = -1 | `set_gamepad_state` axes `[{0, 0}, {1, -1}]` |
-| Slide backward | Left | Thumbstick Y = 1 | `set_gamepad_state` axes `[{0, 0}, {1, 1}]` |
-| Strafe right | Left | Thumbstick X = 1 | `set_gamepad_state` axes `[{0, 1}, {1, 0}]` |
-| Snap turn right | Right | Thumbstick X = 1 (edge) | `set_gamepad_state` axes `[{0, 1}, {1, 0}]` |
-| Snap turn left | Right | Thumbstick X = -1 (edge) | `set_gamepad_state` axes `[{0, -1}, {1, 0}]` |
-| Teleport activate | Right | Thumbstick Y = 1 (down) | `set_gamepad_state` axes `[{0, 0}, {1, 1}]` |
-| Jump | Right | A button (index 3) | `set_gamepad_state` buttons `[{3, 1, true}]` |
+If at any point a transient error occurs (server crash, WebSocket timeout, connection refused, etc.) that is NOT caused by a source code bug:
+1. Kill the dev server: `kill $(lsof -t -i :<PORT>) 2>/dev/null`
+2. Restart: re-run Step 2 to start a fresh dev server (port may change)
+3. Re-run the Pre-test Setup (reload, accept session)
+4. Retry the failed suite
+
+Only give up after one retry attempt per suite. If the same suite fails twice, mark it FAIL and continue to the next suite.
+
+---
 
 ## Known Issues & Workarounds
 

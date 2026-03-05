@@ -1,382 +1,457 @@
 ---
 name: test-interactions
-description: Automated end-to-end test for the XR interaction system (ray, poke/touch, dual-mode). Tests all interaction modes using IWER MCP tools against the poke example. Dynamic entity discovery — no hardcoded indices. Run from examples/poke/ with the dev server running.
-argument-hint: [--suite ray|poke|dual|audio|ui|all]
+description: "Test XR interactions (ray, poke/touch, dual-mode, audio, UI panel) against the poke example using mcp-call.mjs WebSocket CLI."
+argument-hint: "[--suite ray|poke|dual|audio|ui|all]"
 ---
 
-# XR Interaction System Test
+# XR Interaction Test
 
-Automated test suite for verifying ray, poke/touch, and dual-mode interactions using the IWER MCP emulator tools.
+Test 12 suites covering XR interaction behaviors: entity discovery, ECS registration, ray interaction, poke/touch, dual-mode, cross-entity isolation, input mode switching, rapid poke cycles, audio, UI panel, and stability.
 
-**Target Example:** `examples/poke`
+All tool calls go through `scripts/mcp-call.mjs` via WebSocket — no MCP server, no permission prompts.
 
-Run this skill from the `examples/poke/` directory with the dev server running (`npm run dev`).
+**Configuration:**
+- EXAMPLE_DIR: /Users/felixz/Projects/immersive-web-sdk/examples/poke
+- ROOT: /Users/felixz/Projects/immersive-web-sdk
 
-## Pre-test Setup
+**SHORTHAND**: Throughout this document, `MCPCALL` means:
+```
+node /Users/felixz/Projects/immersive-web-sdk/scripts/mcp-call.mjs --port <PORT>
+```
+where `<PORT>` is the port number discovered in Step 2.
 
-1. Reload the page to get a clean state:
-   `mcp__iwsdk-dev-mcp__browser_reload_page`
+**Tool calling pattern**: Every tool call is a Bash command using the MCPCALL shorthand:
+```
+MCPCALL --tool <TOOL_NAME> --args '<JSON_ARGS>' 2>/dev/null
+```
 
-2. Wait 2 seconds for assets to load, then accept the XR session:
-   `mcp__iwsdk-dev-mcp__xr_accept_session`
+- `<TOOL_NAME>` uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`, `xr_look_at`). The script handles translation internally.
+- `<JSON_ARGS>` is a JSON object string. Omit `--args` if no arguments needed.
+- Output is JSON on stdout. Parse it to check assertions.
+- Use `--timeout 20000` for operations that may take longer (reload, accept_session, animate_to, screenshot).
+- Always append `2>/dev/null` to suppress TLS warnings.
 
-3. Verify zero startup errors:
-   `mcp__iwsdk-dev-mcp__browser_get_console_logs` with `count: 20, level: ["error"]`
-   **Expected:** No error-level logs. Warnings about audio autoplay policy are acceptable.
+**IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple mcp-call commands together.
+
+**IMPORTANT**: When the instructions say "wait N seconds", use `sleep N` as a separate Bash command.
 
 ---
 
-## Suite 1: Entity Discovery
+## Step 1: Install Dependencies
+
+```bash
+cd /Users/felixz/Projects/immersive-web-sdk/examples/poke && npm run fresh:install
+```
+
+Wait for this to complete before proceeding.
+
+---
+
+## Step 2: Start Dev Server
+
+Start the dev server as a background task using the Bash tool's `run_in_background: true` parameter:
+
+```bash
+cd /Users/felixz/Projects/immersive-web-sdk/examples/poke && npm run dev
+```
+
+**IMPORTANT**: This command MUST be run with `run_in_background: true` on the Bash tool — do NOT append `&` to the command itself.
+
+Once the background task is launched, poll the output for Vite's ready message (up to 60s). Read the task output or use `tail` to watch for a line containing `Local:`. The output will contain a URL like `https://localhost:5173/`. Extract the port number from this URL and save it as `<PORT>`. All subsequent `MCPCALL` commands use this port.
+
+If the server fails to start within 60 seconds, report FAIL for all suites and skip to Step 5.
+
+---
+
+## Step 3: Verify Connectivity
+
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
+```
+
+This must return JSON with a list of systems. If it fails:
+1. Check `/tmp/iwsdk-dev-interactions.log` for errors
+2. Try killing and restarting the server (Step 2)
+3. If it still fails, report FAIL for all suites and skip to Step 5
+
+---
+
+## Step 4: Run Test Suites
+
+### Pre-test Setup
+
+Run these commands in order:
+
+1. `MCPCALL --tool browser_reload_page --timeout 20000 2>/dev/null`
+   Then: `sleep 3`
+
+2. `MCPCALL --tool xr_accept_session --timeout 20000 2>/dev/null`
+   Then: `sleep 2`
+
+3. `MCPCALL --tool browser_get_console_logs --args '{"count":20,"level":["error"]}' 2>/dev/null`
+   Assert: No error-level logs. Warnings about audio autoplay are acceptable.
+
+---
+
+### Suite 1: Entity Discovery
 
 Discover all testable entities dynamically. These entity indices are used by all subsequent suites.
 
-1. Find the robot entity:
-   `mcp__iwsdk-dev-mcp__ecs_find_entities` with `withComponents: ["Robot"]`
-   **Expected:** Exactly 1 entity. Save its `entityIndex` as `<robot>`.
+**Test 1.1: Find Robot Entity**
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["Robot"]}' 2>/dev/null
+```
+Assert: Exactly 1 entity. Save its `entityIndex` as `<robot>`.
 
-2. Find the panel entity:
-   `mcp__iwsdk-dev-mcp__ecs_find_entities` with `withComponents: ["PanelUI"]`
-   **Expected:** Exactly 1 entity. Save its `entityIndex` as `<panel>`.
+**Test 1.2: Find Panel Entity**
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["PanelUI"]}' 2>/dev/null
+```
+Assert: Exactly 1 entity. Save its `entityIndex` as `<panel>`.
 
-3. Get the robot's world position:
-   Use `mcp__iwsdk-dev-mcp__scene_get_hierarchy` with `maxDepth: 3` to find the robot's Object3D UUID (match `entityIndex` = `<robot>`).
-   Then `mcp__iwsdk-dev-mcp__scene_get_object_transform` with that UUID.
-   Save `positionRelativeToXROrigin` as `<robot-pos>`. Expected near `(0, 0.95, -1.5)`.
+**Test 1.3: Get Robot World Position**
+```bash
+MCPCALL --tool scene_get_hierarchy --args '{"maxDepth":3}' 2>/dev/null
+```
+Find the robot's Object3D UUID (match `entityIndex` = `<robot>`).
+Then:
+```bash
+MCPCALL --tool scene_get_object_transform --args '{"uuid":"<robot-uuid>"}' 2>/dev/null
+```
+Save `positionRelativeToXROrigin` as `<robot-pos>`. Expected near `(0, 0.95, -1.5)`.
 
-4. Get the panel's world position:
-   Same approach — find panel's UUID from hierarchy, query transform.
-   Save `positionRelativeToXROrigin` as `<panel-pos>`. Expected near `(0, 1.5, -1.4)`.
+**Test 1.4: Get Panel World Position**
+Same approach — find panel's UUID from hierarchy, query transform.
+```bash
+MCPCALL --tool scene_get_object_transform --args '{"uuid":"<panel-uuid>"}' 2>/dev/null
+```
+Save `positionRelativeToXROrigin` as `<panel-pos>`. Expected near `(0, 1.5, -1.4)`.
 
 ---
 
-## Suite 2: ECS Registration
+### Suite 2: ECS Registration
 
-1. List all registered systems:
-   `mcp__iwsdk-dev-mcp__ecs_list_systems`
-   **Expected:** These systems must be present:
-   - `RobotSystem`
-   - `PanelSystem`
-   - `InputSystem`
-   - `AudioSystem`
-   - `PanelUISystem`
+**Test 2.1: List Systems**
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
+```
+Assert these systems are present: `RobotSystem`, `PanelSystem`, `InputSystem`, `AudioSystem`, `PanelUISystem`.
 
-2. Verify component schemas:
-   `mcp__iwsdk-dev-mcp__ecs_list_components`
-   **Expected:** These components must be registered:
-   - `Robot`
-   - `PanelUI` (with fields: `config`, `maxWidth`, `maxHeight`)
-   - `AudioSource` (with fields: `src`, `loop`, `_loaded`, `_isPlaying`, `_playRequested`)
-   - `RayInteractable`
-   - `PokeInteractable`
-   - `ScreenSpace`
+**Test 2.2: List Components**
+```bash
+MCPCALL --tool ecs_list_components 2>/dev/null
+```
+Assert these components are registered:
+- `Robot`
+- `PanelUI` (with fields: `config`, `maxWidth`, `maxHeight`)
+- `AudioSource` (with fields: `src`, `loop`, `_loaded`, `_isPlaying`, `_playRequested`)
+- `RayInteractable`
+- `PokeInteractable`
+- `ScreenSpace`
 
 ---
 
-## Suite 3: Ray Interaction on Robot
+### Suite 3: Ray Interaction on Robot
 
-Test the full ray interaction lifecycle on the robot entity (which has both `RayInteractable` and `PokeInteractable`).
+**Test 3.1: Ray Hover**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<robot-pos.z>},"moveToDistance":1.0}' 2>/dev/null
+```
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
+```
+Assert: `Hovered` present, `Pressed` absent.
 
-#### Test 3.1: Ray Hover
+**Test 3.2: Ray Select**
+```bash
+MCPCALL --tool xr_set_select_value --args '{"device":"controller-right","value":1}' 2>/dev/null
+```
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
+```
+Assert: Both `Hovered` and `Pressed` present.
 
-**Action**: Point controller-right at the robot:
+**Test 3.3: Ray Release**
+```bash
+MCPCALL --tool xr_set_select_value --args '{"device":"controller-right","value":0}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right", target: <robot-pos>, moveToDistance: 1.0)
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
+Assert: `Hovered` present, `Pressed` absent.
 
-Wait 0.5 seconds, then:
+**Test 3.4: Ray Unhover**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":5,"y":1.5,"z":0}}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_query_entity(entityIndex: <robot>, components: ["Hovered", "Pressed"])
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
 ```
-**Expected:** `Hovered` present, `Pressed` absent.
-
-#### Test 3.2: Ray Select
-
-**Action**: Press the trigger:
-```
-mcp__iwsdk-dev-mcp__xr_set_select_value(device: "controller-right", value: 1)
-```
-Wait 0.3 seconds, then query `<robot>` for `["Hovered", "Pressed"]`.
-**Expected:** Both `Hovered` and `Pressed` present.
-
-#### Test 3.3: Ray Release
-
-**Action**: Release the trigger:
-```
-mcp__iwsdk-dev-mcp__xr_set_select_value(device: "controller-right", value: 0)
-```
-Wait 0.3 seconds, then query `<robot>` for `["Hovered", "Pressed"]`.
-**Expected:** `Hovered` present (controller still aimed), `Pressed` absent.
-
-#### Test 3.4: Ray Unhover
-
-**Action**: Point controller away:
-```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right", target: {x: 5, y: 1.5, z: 0})
-```
-Wait 0.5 seconds, then query `<robot>` for `["Hovered"]`.
-**Expected:** `Hovered` absent.
+Assert: `Hovered` absent.
 
 ---
 
-## Suite 4: Poke Interaction on Robot
+### Suite 4: Poke Interaction on Robot
 
-Test near-field poke/touch interaction on the robot.
-
-**Key mechanism**: The touch pointer uses a `SphereIntersector` with two thresholds:
+The touch pointer uses a `SphereIntersector` with two thresholds:
 - `hoverRadius: 0.2m` (20cm) — triggers hover
 - `downRadius: 0.02m` (2cm) — triggers auto-select (pointerdown)
 
-#### Test 4.1: Position Controller Near Robot
+**Test 4.1: Position Near Robot**
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<z+0.3>},"orientation":{"pitch":0,"yaw":180,"roll":0}}' 2>/dev/null
+```
+(where `<z+0.3>` = `<robot-pos.z> + 0.3`)
 
-Calculate a position 0.3m in front of the robot: `<robot-pos>` with z offset +0.3.
+**Test 4.2: Slow Animate Through Robot**
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<z-0.3>},"duration":2.5}' --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-right",
-  position: {x: <robot-pos.x>, y: <robot-pos.y>, z: <robot-pos.z> + 0.3},
-  orientation: {pitch: 0, yaw: 180, roll: 0})
+(where `<z-0.3>` = `<robot-pos.z> - 0.3`)
+Then: `sleep 1.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
+Assert: At least `Hovered` present. `Pressed` may also be present.
 
-#### Test 4.2: Slow Animate Through Robot Mesh
-
-Animate slowly through the robot mesh surface (must be slow to hit the 2cm downRadius):
+**Test 4.3: Pull Back**
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"duration":0.3}' --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-right",
-  position: {x: <robot-pos.x>, y: <robot-pos.y>, z: <robot-pos.z> - 0.3},
-  duration: 2.5)
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
-
-Wait 1.5 seconds, then:
-```
-mcp__iwsdk-dev-mcp__ecs_query_entity(entityIndex: <robot>, components: ["Hovered", "Pressed"])
-```
-**Expected:** At least `Hovered` present. `Pressed` may also be present if the controller has penetrated past the downRadius threshold.
-
-#### Test 4.3: Pull Back
-
-```
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-right",
-  position: {x: 0.3, y: 1.5, z: -0.3}, duration: 0.3)
-```
-Wait 0.5 seconds, then query `<robot>` for `["Hovered", "Pressed"]`.
-**Expected:** Neither `Hovered` nor `Pressed` present.
+Assert: Neither `Hovered` nor `Pressed` present.
 
 ---
 
-## Suite 5: Ray Interaction on Panel
+### Suite 5: Ray Interaction on Panel
 
-Test ray interaction on the UI panel entity.
-
-#### Test 5.1: Ray Hover
-
-Point controller at panel:
+**Test 5.1: Ray Hover**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<panel-pos.z>},"moveToDistance":0.8}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right", target: <panel-pos>, moveToDistance: 0.8)
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
 ```
-Wait 0.5 seconds. Query `<panel>` for `["Hovered"]`.
-**Expected:** `Hovered` present.
+Assert: `Hovered` present.
 
-#### Test 5.2: Click
+**Test 5.2: Click**
+```bash
+MCPCALL --tool xr_select --args '{"device":"controller-right","duration":0.2}' 2>/dev/null
+```
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
+```
+Assert: `Hovered` still present.
 
-Perform a quick select:
+**Test 5.3: Unhover**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":5,"y":1.5,"z":0}}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_select(device: "controller-right", duration: 0.2)
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
 ```
-Wait 0.3 seconds. Query `<panel>` for `["Hovered"]`.
-**Expected:** `Hovered` still present (controller didn't move).
-
-#### Test 5.3: Unhover
-
-Point controller away:
-```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right", target: {x: 5, y: 1.5, z: 0})
-```
-Wait 0.5 seconds. Query `<panel>` for `["Hovered"]`.
-**Expected:** `Hovered` absent.
+Assert: `Hovered` absent.
 
 ---
 
-## Suite 6: Dual-Mode Interaction (Panel — Ray + Poke)
+### Suite 6: Dual-Mode Interaction (Panel — Ray + Poke)
 
-Test that both ray and poke work on the panel entity, which has both `RayInteractable` and `PokeInteractable`.
-
-#### Test 6.1: Ray Hover from Distance
-
+**Test 6.1: Ray Hover from Distance**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<panel-pos.z>},"moveToDistance":0.8}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right",
-  target: <panel-pos>, moveToDistance: 0.8)
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["Hovered"]}' 2>/dev/null
 ```
-Wait 0.5 seconds. Query `<panel>` for `["Hovered"]`.
-**Expected:** `Hovered` present.
+Assert: `Hovered` present.
 
-#### Test 6.2: Poke on Panel
-
-Position controller close to panel and animate through slowly:
+**Test 6.2: Poke on Panel**
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<pz+0.2>},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-right",
-  position: {x: <panel-pos.x>, y: <panel-pos.y>, z: <panel-pos.z> + 0.2},
-  orientation: {pitch: 0, roll: 0, yaw: 0})
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-right",
-  position: {x: <panel-pos.x>, y: <panel-pos.y>, z: <panel-pos.z> - 0.1},
-  duration: 3)
+(where `<pz+0.2>` = `<panel-pos.z> + 0.2`)
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":<panel-pos.x>,"y":<panel-pos.y>,"z":<pz-0.01>},"duration":3}' --timeout 20000 2>/dev/null
 ```
-
-Wait 2 seconds, then query `<panel>` for `["Hovered", "Pressed"]`.
-**Expected:** Both `Hovered` and `Pressed` present.
-
-#### Test 6.3: Poke Release
-
-Pull back:
+(where `<pz-0.01>` = `<panel-pos.z> - 0.01` — stop just past the panel surface, NOT far behind it)
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-right",
-  position: {x: 0.3, y: 1.5, z: -0.3}, duration: 0.3)
+Assert: Both `Hovered` and `Pressed` present.
+
+**Test 6.3: Poke Release**
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"duration":0.3}' --timeout 20000 2>/dev/null
 ```
-Wait 0.5 seconds. Query `<panel>` for `["Hovered", "Pressed"]`.
-**Expected:** Neither present.
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
+```
+Assert: Neither present.
 
 ---
 
-## Suite 7: Cross-Entity Isolation
+### Suite 7: Cross-Entity Isolation
 
-**What we're testing**: Interacting with one entity does NOT affect others.
-
-#### Test 7.1: Only Target Entity Gets Hovered
-
-Position controller near robot (poke hover range):
+**Test 7.1: Only Target Entity Gets Hovered**
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":<rx+0.1>,"y":<robot-pos.y>,"z":<rz+0.3>},"orientation":{"pitch":0,"roll":0,"yaw":180}}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-right",
-  position: {x: <robot-pos.x> + 0.1, y: <robot-pos.y>, z: <robot-pos.z> + 0.3},
-  orientation: {pitch: 0, roll: 0, yaw: 180})
-```
+(where `<rx+0.1>` = `<robot-pos.x> + 0.1`, `<rz+0.3>` = `<robot-pos.z> + 0.3`)
+Then: `sleep 1`
 
-**Assert**:
-- Robot entity has `Hovered`
-- Panel entity has NO interaction components
+Check robot:
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
+```
+Assert: `Hovered` present on robot.
+
+Check panel:
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["Hovered","Pressed"]}' 2>/dev/null
+```
+Assert: No interaction components on panel.
 
 ---
 
-## Suite 8: Input Mode Switching
+### Suite 8: Input Mode Switching
 
-#### Test 8.1: Hand Hover After Switch
-
-Switch to hand mode, position hand near robot:
+**Test 8.1: Hand Hover**
+```bash
+MCPCALL --tool xr_set_input_mode --args '{"mode":"hand"}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_input_mode(mode: "hand")
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "hand-right",
-  position: {x: <robot-pos.x> + 0.1, y: <robot-pos.y>, z: <robot-pos.z> + 0.3})
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"hand-right","position":{"x":<rx+0.1>,"y":<robot-pos.y>,"z":<rz+0.3>}}' 2>/dev/null
 ```
-
-Wait 0.5 seconds. Query `<robot>` for `["Hovered"]`.
-**Expected:** `Hovered` present.
-
-#### Test 8.2: Switch Back to Controllers
-
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_input_mode(mode: "controller")
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-right",
-  position: {x: 0.3, y: 1.5, z: -0.3},
-  orientation: {pitch: 0, roll: 0, yaw: 0})
-```
+Assert: `Hovered` present.
 
-Wait 0.5 seconds. Query `<robot>` for `["Hovered"]`.
-**Expected:** `Hovered` absent (clean transition).
+**Test 8.2: Switch Back to Controllers**
+```bash
+MCPCALL --tool xr_set_input_mode --args '{"mode":"controller"}' 2>/dev/null
+```
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":0.3,"y":1.5,"z":-0.3},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
+```
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<robot>,"components":["Hovered"]}' 2>/dev/null
+```
+Assert: `Hovered` absent (clean transition).
 
 ---
 
-## Suite 9: Rapid Poke Cycles (Regression)
+### Suite 9: Rapid Poke Cycles (Regression)
 
-**What we're testing**: The stuck Pressed bug doesn't regress. Multiple poke-release cycles must all clean up properly.
-
-#### Test 9.1: Three Consecutive Poke Cycles
+Test that multiple poke-release cycles all clean up properly (no stuck Pressed).
 
 For each of 3 cycles:
-1. Position at `{x: <robot-pos.x>, y: <robot-pos.y>, z: <robot-pos.z> + 0.4}` with yaw 180°
-2. Animate to `{x: <robot-pos.x>, y: <robot-pos.y>, z: <robot-pos.z> - 0.3}` over 1.5s
-3. Wait 1.5s, assert `Hovered` or `Pressed` is present
-4. Animate back to `{x: <robot-pos.x>, y: <robot-pos.y>, z: <robot-pos.z> + 0.5}` over 0.3s
-5. Wait 0.5s, assert entity has NO interaction components
+1. Position at `{x: <robot-pos.x>, y: <robot-pos.y>, z: <robot-pos.z> + 0.4}` with yaw 180:
+   ```bash
+   MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz+0.4>},"orientation":{"pitch":0,"yaw":180,"roll":0}}' 2>/dev/null
+   ```
+2. Animate through:
+   ```bash
+   MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz-0.3>},"duration":1.5}' --timeout 20000 2>/dev/null
+   ```
+3. `sleep 1.5`, then query `<robot>` for `["Hovered","Pressed"]`. Assert: at least `Hovered` or `Pressed` present.
+4. Animate back:
+   ```bash
+   MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":<robot-pos.x>,"y":<robot-pos.y>,"z":<rz+0.5>},"duration":0.3}' --timeout 20000 2>/dev/null
+   ```
+5. `sleep 0.5`, then query `<robot>` for `["Hovered","Pressed"]`. Assert: neither present.
 
-All 3 cycles must pass — no stuck state accumulation.
-
----
-
-## Suite 10: Audio
-
-Test that audio components are loaded and can be triggered.
-
-#### Test 10.1: Find Audio Entities
-
-```
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["AudioSource"])
-```
-**Expected:** At least 1 entity found. Use the first as `<audio>`.
-
-#### Test 10.2: Verify Audio Loaded
-
-```
-mcp__iwsdk-dev-mcp__ecs_query_entity(entityIndex: <audio>, components: ["AudioSource"])
-```
-**Expected:** `_loaded` = `true`, `src` contains `chime.mp3`.
-
-#### Test 10.3: Trigger Playback
-
-```
-mcp__iwsdk-dev-mcp__ecs_set_component(entityIndex: <audio>, componentId: "AudioSource",
-  field: "loop", value: "true")
-mcp__iwsdk-dev-mcp__ecs_set_component(entityIndex: <audio>, componentId: "AudioSource",
-  field: "_playRequested", value: "true")
-```
-Note: `_playRequested` is consumed within one frame. The response may already show `false`.
-
-#### Test 10.4: Verify Playback State
-
-```
-mcp__iwsdk-dev-mcp__ecs_query_entity(entityIndex: <audio>, components: ["AudioSource"])
-```
-**Expected:** `_isPlaying` = `true` (loop is on).
-
-#### Test 10.5: Stop Playback
-
-```
-mcp__iwsdk-dev-mcp__ecs_set_component(entityIndex: <audio>, componentId: "AudioSource",
-  field: "_stopRequested", value: "true")
-```
+All 3 cycles must pass.
 
 ---
 
-## Suite 11: UI Panel Verification
+### Suite 10: Audio
 
-#### Test 11.1: Panel Loading
-
+**Test 10.1: Find Audio Entities**
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["AudioSource"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_query_entity(entityIndex: <panel>, components: ["PanelUI", "PanelDocument", "ScreenSpace"])
+Assert: At least 1 entity found. Use the first as `<audio>`.
+
+**Test 10.2: Verify Audio Loaded**
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+```
+Assert: `_loaded` = `true`, `src` contains `chime.mp3`.
+
+**Test 10.3: Trigger Playback**
+```bash
+MCPCALL --tool ecs_set_component --args '{"entityIndex":<audio>,"componentId":"AudioSource","field":"loop","value":true}' 2>/dev/null
+```
+```bash
+MCPCALL --tool ecs_set_component --args '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_playRequested","value":true}' 2>/dev/null
+```
+Note: `_playRequested` is consumed within one frame.
+
+**Test 10.4: Verify Playback State**
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<audio>,"components":["AudioSource"]}' 2>/dev/null
+```
+Assert: `_isPlaying` = `true` (loop is on).
+
+**Test 10.5: Stop Playback**
+```bash
+MCPCALL --tool ecs_set_component --args '{"entityIndex":<audio>,"componentId":"AudioSource","field":"_stopRequested","value":true}' 2>/dev/null
 ```
 
-**Expected:**
+---
+
+### Suite 11: UI Panel Verification
+
+**Test 11.1: Panel Loading**
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<panel>,"components":["PanelUI","PanelDocument","ScreenSpace"]}' 2>/dev/null
+```
+Assert:
 - `PanelUI.config` contains `welcome.json`
-- `PanelUI.maxWidth` ≈ `0.5`, `PanelUI.maxHeight` ≈ `0.4`
+- `PanelUI.maxWidth` approximately `0.5`, `PanelUI.maxHeight` approximately `0.4`
 - `PanelDocument` component IS present (proves async panel loading succeeded)
-- `ScreenSpace` component IS present with expected positioning fields
+- `ScreenSpace` component IS present
 
-#### Test 11.2: Visual Confirmation
-
+**Test 11.2: Visual Confirmation**
+```bash
+MCPCALL --tool browser_screenshot --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_screenshot
-```
-**Expected:** The panel should be visible in the scene.
+Assert: returns a `screenshotPath` (PNG file saved to /tmp).
 
 ---
 
-## Suite 12: Stability Check
+### Suite 12: Stability Check
 
+```bash
+MCPCALL --tool browser_get_console_logs --args '{"count":50,"level":["error","warn"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_get_console_logs(count: 50, level: ["error", "warn"])
-```
-**Expected:** No error-level logs. Warnings about `AudioContext` autoplay policy are acceptable.
+Assert: No error-level logs. Warnings about `AudioContext` autoplay policy are acceptable. Pre-existing 404 resource errors from page load are acceptable.
 
 ---
 
-## Results Summary
+## Step 5: Cleanup & Results
 
-After all suites complete, print a summary table:
+Kill the dev server:
+```bash
+kill $(lsof -t -i :<PORT>) 2>/dev/null
+```
+
+Output a summary table:
 
 ```
 | Suite                         | Result    |
@@ -395,7 +470,19 @@ After all suites complete, print a summary table:
 | 12. Stability                 | PASS/FAIL |
 ```
 
-If any suite fails, include details about which assertion failed and the actual vs expected values.
+If any suite fails, include which assertion failed and actual vs expected values.
+
+---
+
+## Recovery
+
+If at any point a transient error occurs (server crash, WebSocket timeout, connection refused, etc.) that is NOT caused by a source code bug:
+1. Kill the dev server: `kill $(lsof -t -i :<PORT>) 2>/dev/null`
+2. Restart: re-run Step 2 to start a fresh dev server (port may change)
+3. Re-run the Pre-test Setup (reload, accept session)
+4. Retry the failed suite
+
+Only give up after one retry attempt per suite. If the same suite fails twice, mark it FAIL and continue to the next suite.
 
 ---
 
@@ -405,7 +492,7 @@ If any suite fails, include details about which assertion failed and the actual 
 The slow animation in poke suites (2-2.5 seconds) is critical. The poke system uses a 2cm `downRadius` threshold — if the controller moves too fast, it can skip past the threshold between frames.
 
 ### Audio autoplay
-Browsers block audio autoplay until user gesture. The `_playRequested` flag may silently fail on the first attempt. If `_isPlaying` is false, this is a browser policy issue, not a bug.
+Browsers block audio autoplay until user gesture. The `_playRequested` flag may silently fail. If `_isPlaying` is false, this is a browser policy issue, not a bug.
 
 ### One-shot flags consumed immediately
 `_playRequested` and `_stopRequested` are processed and reset to `false` within a single frame.
@@ -414,25 +501,7 @@ Browsers block audio autoplay until user gesture. The `_playRequested` flag may 
 Never cache entity indices across page reloads. Always re-discover via `ecs_find_entities`.
 
 ### Touch pointer not enabled
-**Symptom**: Touch hover doesn't work — no Hovered on poke-only entities.
-**Cause**: `toggleSubPointer('touch', true)` was only called at `InputSystem.init()` time, before entities were created.
-**Fix**: Added `toggleSubPointer` calls in the `pokeInteractables` qualify/disqualify handlers.
+`toggleSubPointer('touch', true)` must be called when entities are created, not just at init time.
 
 ### Pressed stuck after poke pull-back
-**Symptom**: `Pressed` component remains after moving controller away.
-**Cause**: `processTouchLifecycle` didn't dispatch `pointer.up()` when intersection was lost in SELECT state.
-**Fix**: Added `entry.pointer.up(this.buttonEvent)` when touch loses intersection while in SELECT state.
-
-## Architecture Notes
-
-### Pointer Priority Order
-`PRIORITY_ORDER: ['touch', 'grab', 'ray']`. Touch wins over grab, grab wins over ray.
-
-### Touch Auto-Select
-`createTouchPointer` uses a `SphereIntersector`. During `pointer.move()`, it calls `pointer.down()` when distance crosses `downRadius` (0.02m), and `pointer.up()` when it crosses back.
-
-### Poke Example Entities
-- **Robot** (at ~(0, 0.95, -1.5), scale 0.5): `RayInteractable` + `PokeInteractable` + `Robot` + `AudioSource`
-- **Panel** (at ~(0, 1.5, -1.4)): `PanelUI` + `RayInteractable` + `PokeInteractable` + `ScreenSpace` + `AudioSource`
-- **Environment** (desk mesh): `LocomotionEnvironment`
-- **Logo banner**: plain mesh, no interaction components
+Fixed: `processTouchLifecycle` now dispatches `pointer.up()` when intersection is lost in SELECT state.

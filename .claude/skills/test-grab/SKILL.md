@@ -1,81 +1,134 @@
 ---
 name: test-grab
-description: Automated end-to-end test for the grab system (distance grab, one-hand grab, two-hand grab). Targets the grab example. Uses dynamic entity discovery — no hardcoded positions or indices. All three grab types exist in the GLXF level.
-argument-hint: [--suite distance|onehand|twohand|all]
+description: "Test grab system (distance grab, one-hand grab, two-hand grab) against the grab example using mcp-call.mjs WebSocket CLI."
+argument-hint: "[--suite distance|onehand|twohand|all]"
 ---
 
 # Grab System Test
 
-**Target Example:** `examples/grab`
+Run 5 test suites covering distance grab, one-hand grab, two-hand grab, system/component registration, and stability.
 
-Automated test suite for verifying distance grab, one-hand grab, and two-hand grab using the IWER MCP emulator tools.
+All tool calls go through `scripts/mcp-call.mjs` via WebSocket — no MCP server, no permission prompts.
 
-Run all suites in order. Report a summary table at the end with pass/fail per suite.
+**Configuration:**
+- EXAMPLE_DIR: /Users/felixz/Projects/immersive-web-sdk/examples/grab
+- ROOT: /Users/felixz/Projects/immersive-web-sdk
 
-## Server Lifecycle
+**SHORTHAND**: Throughout this document, `MCPCALL` means:
+```
+node /Users/felixz/Projects/immersive-web-sdk/scripts/mcp-call.mjs --port <PORT>
+```
+where `<PORT>` is the port number discovered in Step 2.
 
-### Start the dev server (if not already running)
+**Tool calling pattern**: Every tool call is a Bash command using the MCPCALL shorthand:
+```
+MCPCALL --tool <TOOL_NAME> --args '<JSON_ARGS>' 2>/dev/null
+```
+
+- `<TOOL_NAME>` uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`, `xr_look_at`). The script handles translation internally.
+- `<JSON_ARGS>` is a JSON object string. Omit `--args` if no arguments needed.
+- Output is JSON on stdout. Parse it to check assertions.
+- Use `--timeout 20000` for operations that may take longer (reload, accept_session, animate_to, screenshot).
+- Always append `2>/dev/null` to suppress TLS warnings.
+
+**IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple mcp-call commands together.
+
+**IMPORTANT**: When the instructions say "wait N seconds", use `sleep N` as a separate Bash command.
+
+---
+
+## Step 1: Install Dependencies
 
 ```bash
-cd examples/grab && npm run dev &
+cd /Users/felixz/Projects/immersive-web-sdk/examples/grab && npm run fresh:install
 ```
 
-Wait for port 8081 to be ready:
+Wait for this to complete before proceeding.
+
+---
+
+## Step 2: Start Dev Server
+
+Start the dev server as a background task using the Bash tool's `run_in_background: true` parameter:
+
 ```bash
-for i in $(seq 1 30); do lsof -i :8081 -sTCP:LISTEN > /dev/null 2>&1 && break; sleep 1; done
+cd /Users/felixz/Projects/immersive-web-sdk/examples/grab && npm run dev
 ```
 
-### At the end of all tests, kill the dev server
+**IMPORTANT**: This command MUST be run with `run_in_background: true` on the Bash tool — do NOT append `&` to the command itself.
+
+Once the background task is launched, poll the output for Vite's ready message (up to 60s). Read the task output or use `tail` to watch for a line containing `Local:`. The output will contain a URL like `https://localhost:5173/`. Extract the port number from this URL and save it as `<PORT>`. All subsequent `MCPCALL` commands use this port.
+
+If the server fails to start within 60 seconds, report FAIL for all suites and skip to Step 5.
+
+---
+
+## Step 3: Verify Connectivity
 
 ```bash
-kill $(lsof -t -i :8081) 2>/dev/null
+MCPCALL --tool ecs_list_systems 2>/dev/null
 ```
 
-## About the Grab Example
+This must return JSON with a list of systems. If it fails:
+1. Check the dev server output for errors
+2. Try killing and restarting the server (Step 2)
+3. If it still fails, report FAIL for all suites and skip to Step 5
 
-The grab example uses a GLXF-based level (`./glxf/Composition.glxf`) with `grabbing: { useHandPinchForGrab: true }`. All grab entities are defined in the GLXF composition — no code modification needed. Use `ecs_find_entities` to discover entities dynamically by their grab component type.
+---
 
-## Pre-test Setup
+## Step 4: Run Test Suites
 
-```
-mcp__iwsdk-dev-mcp__browser_reload_page
-mcp__iwsdk-dev-mcp__xr_accept_session
-mcp__iwsdk-dev-mcp__browser_get_console_logs(level: ["error", "warn"]) → must be empty
-```
+### Pre-test Setup
+
+Run these commands in order:
+
+1. `MCPCALL --tool browser_reload_page --timeout 20000 2>/dev/null`
+   Then: `sleep 3`
+
+2. `MCPCALL --tool xr_accept_session --timeout 20000 2>/dev/null`
+   Then: `sleep 2`
+
+3. `MCPCALL --tool browser_get_console_logs --args '{"count":20,"level":["error","warn"]}' 2>/dev/null`
+   Assert: No error-level logs.
 
 ### Entity Discovery
 
 Discover all grab entities dynamically:
 
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["DistanceGrabbable"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["DistanceGrabbable"])
-→ At least 1 entity. Save first as <distance>.
+Assert: At least 1 entity. Save first as `<distance>`.
 
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["OneHandGrabbable"])
-→ At least 1 entity. Save first as <onehand>.
-
-mcp__iwsdk-dev-mcp__ecs_find_entities(withComponents: ["TwoHandsGrabbable"])
-→ At least 1 entity. Save first as <twohand>.
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["OneHandGrabbable"]}' 2>/dev/null
 ```
+Assert: At least 1 entity. Save first as `<onehand>`.
+
+```bash
+MCPCALL --tool ecs_find_entities --args '{"withComponents":["TwoHandsGrabbable"]}' 2>/dev/null
+```
+Assert: At least 1 entity. Save first as `<twohand>`.
 
 Get entity positions via scene hierarchy:
+```bash
+MCPCALL --tool scene_get_hierarchy --args '{"maxDepth":3}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__scene_get_hierarchy(maxDepth: 3)
-```
-Find Object3D UUIDs for each grab entity, then:
-```
-mcp__iwsdk-dev-mcp__scene_get_object_transform(uuid: "<entity-uuid>")
+Find Object3D UUIDs for each grab entity, then query their transforms:
+```bash
+MCPCALL --tool scene_get_object_transform --args '{"uuid":"<entity-uuid>"}' 2>/dev/null
 ```
 Save `positionRelativeToXROrigin` as `<distance-pos>`, `<onehand-pos>`, `<twohand-pos>`.
 
 Verify GrabSystem is active:
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_list_systems → GrabSystem at priority -3
-```
+Assert: GrabSystem at priority -3.
 
 ---
 
-## Component Reference
+### Component Reference
 
 | Component | Pointer Type | Activation |
 |-----------|-------------|------------|
@@ -83,199 +136,196 @@ mcp__iwsdk-dev-mcp__ecs_list_systems → GrabSystem at priority -3
 | `OneHandGrabbable` | Grip sphere (squeeze) | `xr_set_gamepad_state` button 1 |
 | `TwoHandsGrabbable` | Grip sphere (squeeze) | `xr_set_gamepad_state` button 1, both hands |
 
-### Critical Distinction: Trigger vs Squeeze
-
-| Grab Type | Button | How to Activate |
-|-----------|--------|----------------|
-| Distance grab | Trigger (select) | `mcp__iwsdk-dev-mcp__xr_set_select_value(device, value: 1)` |
-| One-hand grab | Squeeze (button 1) | `mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device, buttons: [{index: 1, value: 1, touched: true}])` |
-| Two-hand grab | Squeeze (button 1) on BOTH | Same as one-hand, on both controllers |
+**Critical Distinction**: Distance grab uses **trigger** (`xr_set_select_value`). One-hand and two-hand grab use **squeeze** (`xr_set_gamepad_state` button index 1). Wrong button silently fails.
 
 ---
 
-## Test Suites
-
 ### Suite 1: Distance Grab (Ray + Trigger)
 
-**What we're testing**: Ray-based distance grab using trigger/select.
-
-#### Test 1.1: Ray Hover
-
-**Action**: Point controller at the distance-grabbable entity
+**Test 1.1: Ray Hover**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":<distance-pos.x>,"y":<distance-pos.y>,"z":<distance-pos.z>},"moveToDistance":0.8}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right", target: <distance-pos>, moveToDistance: 0.8)
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<distance>,"components":["Hovered"]}' 2>/dev/null
 ```
+Assert: `Hovered` present.
 
-**Assert**: Entity `<distance>` has `Hovered`
-
-#### Test 1.2: Trigger to Grab
-
-**Action**: Snapshot, then hold trigger
+**Test 1.2: Trigger to Grab**
+```bash
+MCPCALL --tool ecs_snapshot --args '{"label":"before-grab"}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_snapshot(label: "before-grab")
-mcp__iwsdk-dev-mcp__xr_set_select_value(device: "controller-right", value: 1)
+```bash
+MCPCALL --tool xr_set_select_value --args '{"device":"controller-right","value":1}' 2>/dev/null
 ```
-
-**Assert**: Entity has `Hovered` + `Pressed`
-
-#### Test 1.3: Move While Grabbed
-
-**Action**: Move controller to new position while trigger held
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<distance>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-right", position: {x: 0.5, y: 1.5, z: -1.0}, duration: 1.0)
-```
+Assert: Both `Hovered` and `Pressed` present.
 
-**Assert**: Entity Transform position changed
+**Test 1.3: Move While Grabbed**
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":0.5,"y":1.5,"z":-1.0},"duration":1.0}' --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_snapshot(label: "after-move")
-mcp__iwsdk-dev-mcp__ecs_diff(from: "before-grab", to: "after-move")
-→ Entity's Transform.position must differ from initial
+Then: `sleep 1.5`
+```bash
+MCPCALL --tool ecs_snapshot --args '{"label":"after-move"}' 2>/dev/null
 ```
-
-#### Test 1.4: Release Trigger
-
+```bash
+MCPCALL --tool ecs_diff --args '{"from":"before-grab","to":"after-move"}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_select_value(device: "controller-right", value: 0)
+Assert: Entity's Transform.position must differ from initial.
+
+**Test 1.4: Release Trigger**
+```bash
+MCPCALL --tool xr_set_select_value --args '{"device":"controller-right","value":0}' 2>/dev/null
 ```
-
-**Assert**: `Pressed` removed, entity stops moving. `Handle` persists (it's permanent).
-
-#### Test 1.5: Point Away — Clean State
-
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<distance>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right", target: {x: 0, y: 1.6, z: -5})
-```
+Assert: `Pressed` removed. `Handle` persists (it's permanent).
 
-**Assert**: `Hovered` removed
+**Test 1.5: Point Away — Clean State**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":0,"y":1.6,"z":-5}}' 2>/dev/null
+```
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<distance>,"components":["Hovered"]}' 2>/dev/null
+```
+Assert: `Hovered` removed.
 
 ---
 
 ### Suite 2: One-Hand Grab (Squeeze)
 
-**What we're testing**: Near-field grab using grip sphere. One-hand grab does NOT produce `Hovered` or `Pressed` tags. Verify via Transform changes.
-
-#### Test 2.1: Ray Isolation — Ray Cannot Interact
-
-**Action**: Point ray directly at the one-hand grabbable from distance
+**Test 2.1: Ray Isolation — Ray Cannot Interact**
+```bash
+MCPCALL --tool xr_look_at --args '{"device":"controller-right","target":{"x":<onehand-pos.x>,"y":<onehand-pos.y>,"z":<onehand-pos.z>},"moveToDistance":0.5}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_look_at(device: "controller-right", target: <onehand-pos>, moveToDistance: 0.5)
+Then: `sleep 1`
+```bash
+MCPCALL --tool ecs_query_entity --args '{"entityIndex":<onehand>,"components":["Hovered","Pressed"]}' 2>/dev/null
 ```
+Assert: No `Hovered` or `Pressed` on entity (ray is denied by `pointerEventsType`).
 
-**Assert**: No `Hovered` or `Pressed` on entity (ray is denied by `pointerEventsType`)
-
-#### Test 2.2: Position Controller at Object + Squeeze
-
+**Test 2.2: Position Controller at Object + Squeeze**
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":<onehand-pos.x>,"y":<onehand-pos.y>,"z":<onehand-pos.z>},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-right",
-  position: <onehand-pos>,
-  orientation: {pitch: 0, roll: 0, yaw: 0})
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  buttons: [{index: 1, value: 1, touched: true}])
-mcp__iwsdk-dev-mcp__ecs_snapshot(label: "before-onehand")
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","buttons":[{"index":1,"value":1,"touched":true}]}' 2>/dev/null
 ```
-
-#### Test 2.3: Move While Squeezing
-
-```
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-right",
-  position: {x: <onehand-pos.x>, y: <onehand-pos.y> + 0.3, z: <onehand-pos.z> + 0.3}, duration: 1.0)
-mcp__iwsdk-dev-mcp__ecs_snapshot(label: "after-onehand-move")
-mcp__iwsdk-dev-mcp__ecs_diff(from: "before-onehand", to: "after-onehand-move")
+Then: `sleep 0.5`
+```bash
+MCPCALL --tool ecs_snapshot --args '{"label":"before-onehand"}' 2>/dev/null
 ```
 
-**Assert**: Entity's Transform.position must have changed to follow the controller.
-
-#### Test 2.4: Release Squeeze
-
+**Test 2.3: Move While Squeezing**
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":<onehand-pos.x>,"y":<onehand-pos.y + 0.3>,"z":<onehand-pos.z + 0.3>},"duration":1.0}' --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  buttons: [{index: 1, value: 0, touched: false}])
+Then: `sleep 1.5`
+```bash
+MCPCALL --tool ecs_snapshot --args '{"label":"after-onehand-move"}' 2>/dev/null
 ```
+```bash
+MCPCALL --tool ecs_diff --args '{"from":"before-onehand","to":"after-onehand-move"}' 2>/dev/null
+```
+Assert: Entity's Transform.position must have changed to follow the controller.
 
-**Assert**: Entity stops moving (Transform remains at released position).
+**Test 2.4: Release Squeeze**
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","buttons":[{"index":1,"value":0,"touched":false}]}' 2>/dev/null
+```
+Assert: Entity stops moving (Transform remains at released position).
 
 ---
 
 ### Suite 3: Two-Hand Grab (Both Controllers Squeeze)
 
-**What we're testing**: Two-hand grab with scaling.
-
-#### Test 3.1: Position Both Controllers Near Object
-
+**Test 3.1: Position Both Controllers Near Object**
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-left","position":{"x":<twohand-pos.x - 0.15>,"y":<twohand-pos.y>,"z":<twohand-pos.z>},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-left",
-  position: {x: <twohand-pos.x> - 0.15, y: <twohand-pos.y>, z: <twohand-pos.z>},
-  orientation: {pitch: 0, roll: 0, yaw: 0})
-mcp__iwsdk-dev-mcp__xr_set_transform(device: "controller-right",
-  position: {x: <twohand-pos.x> + 0.15, y: <twohand-pos.y>, z: <twohand-pos.z>},
-  orientation: {pitch: 0, roll: 0, yaw: 0})
+```bash
+MCPCALL --tool xr_set_transform --args '{"device":"controller-right","position":{"x":<twohand-pos.x + 0.15>,"y":<twohand-pos.y>,"z":<twohand-pos.z>},"orientation":{"pitch":0,"roll":0,"yaw":0}}' 2>/dev/null
 ```
 
-#### Test 3.2: Both Squeeze + Snapshot
+**Test 3.2: Both Squeeze + Snapshot**
+```bash
+MCPCALL --tool ecs_snapshot --args '{"label":"before-twohand"}' 2>/dev/null
+```
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-left","buttons":[{"index":1,"value":1,"touched":true}]}' 2>/dev/null
+```
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","buttons":[{"index":1,"value":1,"touched":true}]}' 2>/dev/null
+```
+Then: `sleep 0.5`
 
+**Test 3.3: Spread Hands — Scale Up**
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-left","position":{"x":<twohand-pos.x - 0.5>,"y":<twohand-pos.y>,"z":<twohand-pos.z>},"duration":1.0}' --timeout 20000 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_snapshot(label: "before-twohand")
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-left",
-  buttons: [{index: 1, value: 1, touched: true}])
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  buttons: [{index: 1, value: 1, touched: true}])
+```bash
+MCPCALL --tool xr_animate_to --args '{"device":"controller-right","position":{"x":<twohand-pos.x + 0.5>,"y":<twohand-pos.y>,"z":<twohand-pos.z>},"duration":1.0}' --timeout 20000 2>/dev/null
 ```
+Then: `sleep 1.5`
+```bash
+MCPCALL --tool ecs_snapshot --args '{"label":"after-twohand-scale"}' 2>/dev/null
+```
+```bash
+MCPCALL --tool ecs_diff --args '{"from":"before-twohand","to":"after-twohand-scale"}' 2>/dev/null
+```
+Assert: Entity Transform.scale should be larger than initial.
 
-#### Test 3.3: Spread Hands — Scale Up
-
+**Test 3.4: Release Both**
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-left","buttons":[{"index":1,"value":0,"touched":false}]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-left",
-  position: {x: <twohand-pos.x> - 0.5, y: <twohand-pos.y>, z: <twohand-pos.z>}, duration: 1.0)
-mcp__iwsdk-dev-mcp__xr_animate_to(device: "controller-right",
-  position: {x: <twohand-pos.x> + 0.5, y: <twohand-pos.y>, z: <twohand-pos.z>}, duration: 1.0)
-```
-
-**Assert**: Entity Transform.scale increased
-```
-mcp__iwsdk-dev-mcp__ecs_snapshot(label: "after-twohand-scale")
-mcp__iwsdk-dev-mcp__ecs_diff(from: "before-twohand", to: "after-twohand-scale")
-→ scale should be larger than initial
-```
-
-#### Test 3.4: Release Both
-
-```
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-left",
-  buttons: [{index: 1, value: 0, touched: false}])
-mcp__iwsdk-dev-mcp__xr_set_gamepad_state(device: "controller-right",
-  buttons: [{index: 1, value: 0, touched: false}])
+```bash
+MCPCALL --tool xr_set_gamepad_state --args '{"device":"controller-right","buttons":[{"index":1,"value":0,"touched":false}]}' 2>/dev/null
 ```
 
 ---
 
 ### Suite 4: System & Component Registration
 
-#### Test 4.1: GrabSystem at Correct Priority
+**Test 4.1: GrabSystem at Correct Priority**
+```bash
+MCPCALL --tool ecs_list_systems 2>/dev/null
+```
+Assert: GrabSystem present at priority -3.
 
+**Test 4.2: Components Registered**
+```bash
+MCPCALL --tool ecs_list_components 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__ecs_list_systems
-→ GrabSystem present at priority -3
-```
-
-#### Test 4.2: Components Registered
-
-```
-mcp__iwsdk-dev-mcp__ecs_list_components
-→ Must include: OneHandGrabbable, TwoHandsGrabbable, DistanceGrabbable, Handle
-```
+Assert: Must include: `OneHandGrabbable`, `TwoHandsGrabbable`, `DistanceGrabbable`, `Handle`.
 
 ---
 
 ### Suite 5: Stability
 
+```bash
+MCPCALL --tool browser_get_console_logs --args '{"count":30,"level":["error","warn"]}' 2>/dev/null
 ```
-mcp__iwsdk-dev-mcp__browser_get_console_logs(count: 30, level: ["error", "warn"])
-→ Must return empty
-```
+Assert: No application-level errors or warnings. Pre-existing 404 resource errors from page load are acceptable.
 
 ---
 
-## Results Summary
+## Step 5: Cleanup & Results
+
+Kill the dev server:
+```bash
+kill $(lsof -t -i :<PORT>) 2>/dev/null
+```
+
+Output a summary table:
 
 ```
 | Suite                         | Result    |
@@ -287,7 +337,19 @@ mcp__iwsdk-dev-mcp__browser_get_console_logs(count: 30, level: ["error", "warn"]
 | 5. Stability                  | PASS/FAIL |
 ```
 
-If any suite fails, include details about which assertion failed and the actual vs expected values.
+If any suite fails, include which assertion failed and actual vs expected values.
+
+---
+
+## Recovery
+
+If at any point a transient error occurs (server crash, WebSocket timeout, connection refused, etc.) that is NOT caused by a source code bug:
+1. Kill the dev server: `kill $(lsof -t -i :<PORT>) 2>/dev/null`
+2. Restart: re-run Step 2 to start a fresh dev server (port may change)
+3. Re-run the Pre-test Setup (reload, accept session)
+4. Retry the failed suite
+
+Only give up after one retry attempt per suite. If the same suite fails twice, mark it FAIL and continue to the next suite.
 
 ---
 
