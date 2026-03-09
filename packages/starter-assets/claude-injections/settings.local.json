@@ -43,6 +43,7 @@
       "mcp__iwsdk-rag-local__find_usage_examples",
       "Skill(catalog-assets)",
       "Skill(click-target)",
+      "Skill(iwsdk-physics)",
       "Skill(iwsdk-planner)",
       "Skill(iwsdk-ui-panel)",
       "Skill(preview-model)",
