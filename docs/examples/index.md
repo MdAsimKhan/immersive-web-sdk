@@ -19,7 +19,8 @@ const examples = [
   { id: 'grab', name: 'Grab Interactions' },
   { id: 'locomotion', name: 'Locomotion' },
   { id: 'physics', name: 'Physics' },
-  { id: 'scene-understanding', name: 'Scene Understanding' }
+  { id: 'scene-understanding', name: 'Scene Understanding' },
+  { id: 'depth-occlusion', name: 'Depth Occlusion' }
 ];
 
 const selectedExample = ref('');
