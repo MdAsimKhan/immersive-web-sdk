@@ -11,6 +11,7 @@ import fs from 'fs-extra';
 import type { Plugin, ViteDevServer } from 'vite';
 import { resolveMetaSpatialCliPath } from './cli-path-resolver.js';
 import { regenerateGLXF, createFileWatcher, cleanup } from './file-watcher.js';
+import { verifyMSEVersion } from './mse-version-check.js';
 import type { GLXFGenerationOptions, ProcessedGLXFOptions } from './types.js';
 
 // Export types
@@ -53,6 +54,9 @@ async function generateInitialGLXF(
   const watchDir = path.resolve(process.cwd(), pluginOptions.metaSpatialDir);
 
   console.log('🚀 Generating initial GLXF files for dev server...');
+
+  // Check MSE version — throws if outdated
+  verifyMSEVersion();
 
   try {
     // Find all .metaspatial files
@@ -102,6 +106,9 @@ async function generateBuildGLXF(
   if (pluginOptions.verbose) {
     console.log('🚀 Starting GLXF generation build phase...');
   }
+
+  // Check MSE version — throws if outdated
+  verifyMSEVersion();
 
   try {
     const metaSpatialDir = path.resolve(
