@@ -13,8 +13,8 @@
     "three": "npm:super-three@0.181.0"
   },
   "devDependencies": {
-    "@felixtz/iwsdk-rag-mcp": "^0.2.0",
-    "@meta-quest/hzdb": "^0.99.2",
+    "@felixtz/iwsdk-rag-mcp": "^0.3.1",
+    "@meta-quest/hzdb": "^1.0.0",
     "@iwsdk/vite-plugin-gltf-optimizer": "file:../packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz",
     "@iwsdk/vite-plugin-dev": "file:../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
     "@iwsdk/vite-plugin-metaspatial": "file:../packages/vite-plugin-metaspatial/iwsdk-vite-plugin-metaspatial.tgz",
