@@ -65,6 +65,7 @@ gtag('config', 'G-V03QDNGKY3');`,
     // },
 
     nav: [
+      { text: 'AI', link: '/ai/' },
       { text: 'Guides', link: '/guides/01-project-setup' },
       { text: 'Concepts', link: '/concepts/' },
       { text: 'API', link: '/api/' },
@@ -82,6 +83,18 @@ gtag('config', 'G-V03QDNGKY3');`,
     ],
 
     sidebar: {
+      '/ai/': [
+        {
+          text: 'AI-Native Development',
+          items: [
+            { text: 'Overview', link: '/ai/' },
+            { text: 'Getting Started', link: '/ai/getting-started' },
+            { text: 'Modes', link: '/ai/modes' },
+            { text: 'MCP Tools Reference', link: '/ai/mcp-tools' },
+            { text: 'Workflows', link: '/ai/workflows' },
+          ],
+        },
+      ],
       '/guides/': [
         {
           text: 'Getting Started',
