@@ -12,11 +12,13 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import WebSocket from 'ws';
+import { reportToolCall } from './hzdb-telemetry.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
 let port = 5173; // Default Vite port
 let verbose = false;
+let clientVersion: string | null = null;
 
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--port' && args[i + 1]) {
@@ -28,6 +30,9 @@ for (let i = 0; i < args.length; i++) {
         `[IWSDK-MCP] Invalid port: ${args[i + 1]}, using default ${port}`,
       );
     }
+    i++;
+  } else if (args[i] === '--client-version' && args[i + 1]) {
+    clientVersion = args[i + 1];
     i++;
   } else if (args[i] === '--verbose') {
     verbose = true;
@@ -1099,17 +1104,27 @@ async function main() {
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+    const startTime = Date.now();
 
     // Ensure WebSocket is connected
     if (!isConnected) {
       try {
         await connectWebSocket();
       } catch (error) {
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        reportToolCall(
+          name,
+          false,
+          Date.now() - startTime,
+          errorMsg.slice(0, 30),
+          undefined,
+          clientVersion ?? undefined,
+        );
         return {
           content: [
             {
               type: 'text',
-              text: `Failed to connect to IWSDK dev server: ${error instanceof Error ? error.message : String(error)}`,
+              text: `Failed to connect to IWSDK dev server: ${errorMsg}`,
             },
           ],
           isError: true,
@@ -1125,6 +1140,15 @@ async function main() {
         _tabId?: string;
         _tabGeneration?: number;
       };
+
+      reportToolCall(
+        name,
+        true,
+        Date.now() - startTime,
+        undefined,
+        undefined,
+        clientVersion ?? undefined,
+      );
 
       // Special handling for screenshot - return inline image
       const result = rawResponse?.result ?? rawResponse;
@@ -1152,11 +1176,20 @@ async function main() {
       // Standard tool response — use tabTracker for tab-change detection + _tab metadata
       return tabTracker.processResponse(rawResponse);
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      reportToolCall(
+        name,
+        false,
+        Date.now() - startTime,
+        errorMsg.slice(0, 30),
+        undefined,
+        clientVersion ?? undefined,
+      );
       return {
         content: [
           {
             type: 'text',
-            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            text: `Error: ${errorMsg}`,
           },
         ],
         isError: true,

@@ -225,6 +225,136 @@ entity.addComponent(ScreenSpace, { width: '400px', top: '20px' });
 
 ---
 
+## MCP Tools Available
+
+### IWSDK-RAG (Code Intelligence)
+
+Semantic code search and API lookup for IWSDK, elics ECS, and dependencies.
+
+| Tool                    | Purpose                      | When to Use                                              |
+| ----------------------- | ---------------------------- | -------------------------------------------------------- |
+| `search_code`           | Semantic search across IWSDK | Finding code by description ("how to create VR session") |
+| `get_api_reference`     | Quick API lookup by name     | When you know the class/function name                    |
+| `find_by_relationship`  | Find code by relationships   | Classes that extend/implement something                  |
+| `list_ecs_components`   | List all ECS components      | Discovering available components                         |
+| `list_ecs_systems`      | List all ECS systems         | Discovering available systems                            |
+| `find_usage_examples`   | Find real-world examples     | Understanding how to use an API                          |
+
+### IWER (Immersive Web Emulation Runtime)
+
+WebXR emulator control for testing without a headset.
+
+**Session**
+
+| Tool                    | Purpose                                 |
+| ----------------------- | --------------------------------------- |
+| `xr_get_session_status` | Check IWER connection (**call first!**) |
+| `xr_accept_session`     | Enter XR mode                           |
+| `xr_end_session`        | Exit XR mode                            |
+| `browser_reload_page`   | Reload browser to reset state           |
+
+**Device Control**
+
+| Tool                   | Purpose                                                                 |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `xr_set_transform`     | Set position/orientation of headset, controller, or hand                |
+| `xr_get_transform`     | Read current position/orientation of a device                           |
+| `xr_look_at`           | Orient a device toward a world position (optional move-to)              |
+| `xr_animate_to`        | Smoothly animate a device to a new transform over time                  |
+| `xr_set_input_mode`    | Switch between `controller` and `hand` tracking                         |
+| `xr_set_connected`     | Connect/disconnect an input device                                      |
+| `xr_select`            | Full select action (press+release) — fires selectstart/select/selectend |
+| `xr_set_select_value`  | Set trigger/pinch value (0-1) for grab-move-release patterns            |
+| `xr_set_gamepad_state` | Set button values and thumbstick axes by index                          |
+| `xr_get_device_state`  | Read full device state (headset + controllers + hands)                  |
+| `xr_set_device_state`  | Batch-set device state; call with no args to reset defaults             |
+
+**Observation**
+
+| Tool                       | Purpose                                                 |
+| -------------------------- | ------------------------------------------------------- |
+| `browser_screenshot`       | Screenshot the browser (returns image inline)           |
+| `browser_get_console_logs` | Browser console logs with level/pattern/count filtering |
+
+**Scene Inspection** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
+
+| Tool                         | Purpose                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `scene_get_hierarchy`        | Three.js scene tree with names, UUIDs, and entity indices                                  |
+| `scene_get_object_transform` | Local + global transforms; includes position relative to XR origin (use with `xr_look_at`) |
+
+**ECS Debugging** (requires IWSDK / FRAMEWORK_MCP_RUNTIME)
+
+| Tool                  | Purpose                                                    |
+| --------------------- | ---------------------------------------------------------- |
+| `ecs_find_entities`   | Search entities by component composition and/or name regex |
+| `ecs_query_entity`    | Read all component field values for an entity by index     |
+| `ecs_list_components` | List all registered components with field schemas          |
+| `ecs_list_systems`    | List all systems with priority, pause state, entity counts |
+| `ecs_set_component`   | Write a component field value on a live entity             |
+| `ecs_toggle_system`   | Pause/resume a specific system by name                     |
+| `ecs_pause`           | Freeze all ECS updates (render loop continues)             |
+| `ecs_resume`          | Resume ECS updates after pause                             |
+| `ecs_step`            | Advance N frames with fixed timestep while paused          |
+| `ecs_snapshot`        | Capture full ECS state (stores up to 2 snapshots)          |
+| `ecs_diff`            | Compare two snapshots — shows field-level diffs            |
+
+**Key workflows:**
+
+- **Discover entities:** `ecs_find_entities` (get entity indices) → `ecs_query_entity` (read component data)
+- **Discover schema:** `ecs_list_components` to see field names/types before querying or setting values
+- **Frame-by-frame debugging:** `ecs_pause` → `ecs_step` (count/delta). Must pause before stepping.
+- **Diff state changes:** `ecs_snapshot(label="before")` → trigger action → `ecs_snapshot(label="after")` → `ecs_diff(from="before", to="after")`
+- **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system` to pause one system while others run
+- **Look at an object:** `scene_get_hierarchy` → find UUID → `scene_get_object_transform` → use `positionRelativeToXROrigin` with `xr_look_at`
+
+**Connection check — always call first:**
+
+Call `xr_get_session_status` before doing anything else. If this returns a successful connection, the dev server is ALREADY running. Do NOT start another one.
+
+**Troubleshooting:**
+
+- Dev server not running → Start with `npm run dev`
+- Browser tab in background → Bring to foreground (Chrome throttles background tabs)
+- Session not active → Use `xr_accept_session`
+
+### hzdb (Meta Quest Device Tools)
+
+Tools for Meta Quest device management and Meta's 3D asset library.
+
+**3D Asset Search**
+
+| Tool                 | Purpose                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `meta_assets_search` | Search Meta's 3D model library by text description. Returns GLB/FBX download URLs and previews. |
+
+Use `meta_assets_search` to find ready-made 3D models (e.g., "spaceship", "office chair", "fantasy sword"). Download the GLB URL to `public/gltf/` and add it to your `AssetManifest`.
+
+**Device Management** (requires a connected Quest via USB or WiFi ADB)
+
+| Tool                       | Purpose                                               |
+| -------------------------- | ----------------------------------------------------- |
+| `device_list`              | List connected Quest devices                          |
+| `device_info`              | Device model, Android version, serial number          |
+| `device_battery`           | Battery level, charging status, temperature           |
+| `device_wake`              | Wake headset from sleep                               |
+| `device_proximity_sensor`  | Disable proximity sensor to keep headset awake on desk |
+| `get_device_logcat`        | Read device logs with tag/level/package filtering     |
+| `push_file` / `pull_file`  | Transfer files to/from the device                     |
+
+These are device action tools, not IWSDK development tools. Useful for checking device health or transferring files, but not part of the typical code-build-test loop.
+
+**Quest Platform Documentation**
+
+| Tool                   | Purpose                                        |
+| ---------------------- | ---------------------------------------------- |
+| `search_docs`          | Search Meta Quest developer documentation      |
+| `fetch_meta_quest_doc` | Fetch full content of a documentation page      |
+
+**Important:** Only use these for Quest platform questions (distribution policies, WebXR spec details, device capabilities). For IWSDK API and development questions, use `iwsdk-rag-local` instead — it returns actual source code and is significantly more accurate.
+
+---
+
 ## Quick Reference
 
 ### Core Architecture
@@ -459,8 +589,23 @@ npx tsc --noEmit
 
 Type errors will prevent systems from initializing properly, but may not show errors in the browser console. Always type check after writing code and before testing.
 
+**BEFORE starting a dev server, ALWAYS check if one is already running** by calling `xr_get_session_status`. If this returns a successful connection, the dev server is already running. Do NOT start another one.
+
 1. **Type check first:** `npx tsc --noEmit` - fix any errors before proceeding
-2. Start dev server: `npm run dev`
-3. Open browser to `https://localhost:8081`
-4. Enter XR mode in browser
-5. Test interactions with controllers
+2. Check IWER status first: `xr_get_session_status`
+3. If not connected, start dev server: `npm run dev`
+4. Open browser to `https://localhost:8081`
+5. Enter XR: `xr_accept_session`
+6. Test interactions with controller tools
+
+### Debugging Missing Features
+
+If something isn't appearing or working but no errors show in console:
+
+1. **Don't use level filter for console logs** — call `browser_get_console_logs` with just `count`, not `level` filter, as you may miss important errors
+2. **Run type check** — `npx tsc --noEmit` often reveals issues that don't appear as runtime errors
+3. **Check scene hierarchy** — use `scene_get_hierarchy` to verify entities exist and find entity indices
+4. **Reload and check logs immediately** — some errors only appear during initialization
+5. **Inspect ECS state** — use `ecs_find_entities` to check if entities have expected components, then `ecs_query_entity` to read their values
+6. **Diff before/after** — take `ecs_snapshot` before and after an action to see exactly what changed (or didn't)
+7. **Isolate systems** — use `ecs_toggle_system` to pause suspect systems one at a time to find which causes the issue

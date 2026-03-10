@@ -6,7 +6,8 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
-import { existsSync } from 'fs';
+import { randomUUID } from 'crypto';
+import { existsSync, readFileSync } from 'fs';
 import { writeFile, readFile, unlink, mkdir } from 'fs/promises';
 import * as path from 'path';
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
@@ -16,6 +17,10 @@ import {
   launchManagedBrowser,
   type ManagedBrowser,
 } from './headless-browser.js';
+import {
+  reportSessionStart,
+  reportSessionEnd,
+} from './hzdb-telemetry.js';
 import { buildInjectionBundle } from './injection-bundler.js';
 import { createRelayHandler } from './mcp-relay.js';
 import type {
@@ -610,6 +615,31 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         'index.js',
       );
 
+      // Check if hzdb is installed (for MCP config — telemetry uses npx and fails silently)
+      const hzdbInstalled = existsSync(
+        path.join(config.root, 'node_modules', '@meta-quest', 'hzdb'),
+      );
+
+      // Resolve IWSDK version for telemetry attribution
+      let iwsdkVersion: string | undefined;
+      try {
+        const pluginPkgPath = path.join(
+          config.root,
+          'node_modules',
+          '@iwsdk',
+          'vite-plugin-dev',
+          'package.json',
+        );
+        const pluginPkg = JSON.parse(readFileSync(pluginPkgPath, 'utf-8'));
+        iwsdkVersion = pluginPkg.version;
+      } catch {
+        // Version detection is best-effort
+      }
+
+      // Session tracking for telemetry
+      const sessionId = randomUUID();
+      const sessionStartTime = Date.now();
+
       // Track which files we created (so cleanup can decide whether to delete them)
       const filesWeCreated = new Set<string>();
       // Track our managed server entry keys for JSON unmerge
@@ -618,13 +648,18 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       let configWritePromise: Promise<void> | null = null;
 
       const writeMcpConfigs = async (actualPort: number) => {
+        const mcpServerArgs = [mcpServerPath, '--port', String(actualPort)];
+        if (iwsdkVersion) {
+          mcpServerArgs.push('--client-version', iwsdkVersion);
+        }
+
         const serverEntries: Record<
           string,
           { command: string; args: string[] }
         > = {
           'iwsdk-dev-mcp': {
             command: 'node',
-            args: [mcpServerPath, '--port', String(actualPort)],
+            args: mcpServerArgs,
           },
         };
 
@@ -633,6 +668,14 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           serverEntries['iwsdk-rag-local'] = {
             command: 'node',
             args: [ragMcpServerPath],
+          };
+        }
+
+        // Include hzdb MCP server if installed
+        if (hzdbInstalled) {
+          serverEntries['hzdb'] = {
+            command: 'npx',
+            args: ['@meta-quest/hzdb', 'mcp', 'server'],
           };
         }
 
@@ -693,6 +736,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             : server.config.server.port || 5173;
         configWritePromise = writeMcpConfigs(actualPort);
 
+        // Report session start to hzdb telemetry (fire-and-forget via npx)
+        reportSessionStart(sessionId, {
+          iwsdkVersion,
+          clientVersion: iwsdkVersion,
+          port: actualPort,
+        });
+
         // Warm up RAG MCP server (downloads embedding model if needed)
         // This ensures the model is cached before Claude Code tries to use it
         warmupRagMcp(ragMcpServerPath, pluginOptions.verbose);
@@ -711,6 +761,12 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       // Clean up WebSocket server and MCP config files when Vite server closes
       server.httpServer?.on('close', () => {
         serverShuttingDown = true;
+
+        reportSessionEnd(sessionId, {
+          durationMs: Date.now() - sessionStartTime,
+          reason: 'user_closed',
+          clientVersion: iwsdkVersion,
+        });
 
         if (mcpWss) {
           for (const client of mcpClients || []) {

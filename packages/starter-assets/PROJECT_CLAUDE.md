@@ -397,6 +397,41 @@ If this returns a successful connection, the dev server is ALREADY running. Do N
 - Browser tab in background → Bring to foreground (Chrome throttles background tabs)
 - Session not active → Use `mcp__iwsdk-dev-mcp__xr_accept_session`
 
+### hzdb (Meta Quest Device Tools)
+
+Tools for Meta Quest device management and Meta's 3D asset library. All tools are prefixed `mcp__hzdb__`.
+
+**3D Asset Search**
+
+| Tool                 | Purpose                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| `meta_assets_search` | Search Meta's 3D model library by text description. Returns GLB/FBX download URLs and previews. |
+
+Use `meta_assets_search` to find ready-made 3D models (e.g., "spaceship", "office chair", "fantasy sword"). Download the GLB URL to `public/gltf/` and add it to your `AssetManifest`.
+
+**Device Management** (requires a connected Quest via USB or WiFi ADB)
+
+| Tool                       | Purpose                                               |
+| -------------------------- | ----------------------------------------------------- |
+| `device_list`              | List connected Quest devices                          |
+| `device_info`              | Device model, Android version, serial number          |
+| `device_battery`           | Battery level, charging status, temperature           |
+| `device_wake`              | Wake headset from sleep                               |
+| `device_proximity_sensor`  | Disable proximity sensor to keep headset awake on desk |
+| `get_device_logcat`        | Read device logs with tag/level/package filtering     |
+| `push_file` / `pull_file`  | Transfer files to/from the device                     |
+
+These are device action tools, not IWSDK development tools. Useful for checking device health or transferring files, but not part of the typical code-build-test loop.
+
+**Quest Platform Documentation**
+
+| Tool                   | Purpose                                        |
+| ---------------------- | ---------------------------------------------- |
+| `search_docs`          | Search Meta Quest developer documentation      |
+| `fetch_meta_quest_doc` | Fetch full content of a documentation page      |
+
+**Important:** Only use these for Quest platform questions (distribution policies, WebXR spec details, device capabilities). For IWSDK API and development questions, use `iwsdk-rag-local` instead — it returns actual source code and is significantly more accurate.
+
 ---
 
 ## Quick Reference

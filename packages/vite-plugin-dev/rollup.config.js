@@ -40,7 +40,7 @@ const pluginConfig = {
     'ws',
     'playwright',
     'os',
-    'module',
+    'crypto',
   ],
   plugins: [
     nodeResolve({
