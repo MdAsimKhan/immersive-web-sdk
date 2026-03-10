@@ -7,6 +7,7 @@
 
 import * as os from 'os';
 import { chromium } from 'playwright';
+import sharp from 'sharp';
 
 /**
  * Log types for the server-side console capture.
@@ -119,7 +120,11 @@ export async function launchManagedBrowser(
   url: string,
   headless: boolean,
   verbose: boolean,
-  viewport: { width: number; height: number } = { width: 800, height: 800 },
+  viewport: { width: number; height: number } | null = null,
+  screenshotSize: { width: number; height: number } = {
+    width: 800,
+    height: 800,
+  },
 ): Promise<ManagedBrowser> {
   // Select GPU backend based on platform
   const angleBackend =
@@ -142,7 +147,7 @@ export async function launchManagedBrowser(
 
   const context = await browser.newContext({
     ignoreHTTPSErrors: true, // Accept self-signed certs (e.g. from mkcert)
-    viewport, // Configurable viewport for screenshot resolution
+    viewport, // null = freely resizable; { width, height } = fixed viewport
   });
   const page = await context.newPage();
 
@@ -238,7 +243,21 @@ export async function launchManagedBrowser(
     },
     page,
     queryLogs: (options?: LogQuery) => consoleCapture.query(options),
-    screenshot: () => page.screenshot({ type: 'png' }),
+    screenshot: async () => {
+      const raw = await page.screenshot({ type: 'png' });
+      // In non-agent modes (viewport is null / freely resizable), downscale
+      // the screenshot to fit within screenshotSize bounds.
+      if (viewport === null) {
+        return sharp(raw)
+          .resize(screenshotSize.width, screenshotSize.height, {
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
+          .png()
+          .toBuffer();
+      }
+      return raw;
+    },
     onClose: (callback: () => void) => {
       closeCallback = callback;
     },

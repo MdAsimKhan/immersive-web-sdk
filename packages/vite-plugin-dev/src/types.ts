@@ -24,54 +24,37 @@ export interface SEMOptions {
 
 export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex';
 
+export type AiMode = 'agent' | 'oversight' | 'collaborate';
+
 /**
  * AI agent tooling configuration.
  * Enables AI agent control of the emulated XR runtime via MCP + WebSocket.
  */
 export interface AiOptions {
   /**
-   * Override the Vite dev server port used for the MCP WebSocket connection.
-   * If not specified, the actual Vite dev server port is auto-detected.
-   * You should NOT normally need to set this.
+   * Usage mode:
+   * - `'agent'`: Headless Playwright, fixed viewport, no DevUI. Normal browser opens for the human.
+   * - `'oversight'`: Visible Playwright, freely resizable, no DevUI. Human watches the agent.
+   * - `'collaborate'`: Visible Playwright, freely resizable, DevUI on. Human and agent share the session.
+   * @default 'agent'
    */
-  port?: number;
-
-  /**
-   * Enable verbose logging for MCP operations
-   * @default false
-   */
-  verbose?: boolean;
+  mode?: AiMode;
 
   /**
    * Which AI tools to generate MCP config files for.
-   * @default ['claude', 'cursor', 'copilot', 'codex']
+   * @default ['claude']
    */
   tools?: AiTool[];
 
   /**
-   * Run the Playwright-managed browser in headless mode (no visible window).
-   * When false, the browser window is visible so you can watch the agent
-   * interact with the scene.
-   * @default false
-   */
-  headless?: boolean;
-
-  /**
-   * Browser viewport dimensions. Controls the screenshot resolution.
+   * Screenshot size constraint.
+   * - In agent mode: sets the Playwright viewport dimensions directly.
+   * - In oversight/collaborate: screenshots are downscaled to fit within
+   *   this bounding box, preserving aspect ratio.
    * @default { width: 800, height: 800 }
    */
-  viewport?: { width?: number; height?: number };
-
-  /**
-   * Show the IWER DevUI overlay in the Playwright-managed browser window.
-   * Useful for manual debugging alongside the AI agent.
-   * @default true
-   */
-  devUI?: boolean;
+  screenshotSize?: { width?: number; height?: number };
 }
-
-/** @deprecated Use `AiOptions` instead */
-export type MCPOptions = AiOptions;
 
 /**
  * XR emulator configuration
@@ -130,10 +113,9 @@ export interface DevPluginOptions {
   /**
    * AI agent tooling configuration.
    * Enables AI agent control of the emulated XR runtime via MCP + WebSocket.
-   * Pass `true` for defaults, `false` to disable, or an object for fine-grained control.
-   * @default true
+   * Omit to disable AI features entirely (no Playwright, no MCP configs).
    */
-  ai?: boolean | AiOptions;
+  ai?: AiOptions;
 
   /**
    * Enable verbose logging
@@ -154,12 +136,12 @@ export interface ProcessedDevOptions {
     defaultScene: string;
   };
   ai?: {
-    port?: number;
-    verbose: boolean;
+    mode: AiMode;
     tools: AiTool[];
     headless: boolean;
-    viewport: { width: number; height: number };
     devUI: boolean;
+    viewport: { width: number; height: number } | null;
+    screenshotSize: { width: number; height: number };
   };
   injectOnBuild: boolean;
   activation: 'localhost' | 'always' | RegExp;

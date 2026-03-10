@@ -14,7 +14,7 @@ export default defineConfig({
         activation: 'always',
         injectOnBuild: true,
       },
-      ai: { devUI: false, viewport: { width: 500, height: 500 } },
+      ai: { mode: 'agent', screenshotSize: { width: 500, height: 500 } },
       verbose: true,
     }),
 

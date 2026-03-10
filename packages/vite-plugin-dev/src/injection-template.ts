@@ -133,9 +133,11 @@ function initDevRuntime(config: ProcessedDevOptions): void {
     }
     xrDevice.installRuntime();
 
-    // Install DevUI unless explicitly disabled via ai.devUI option.
-    // When ai is not configured, DevUI always shows.
-    if (!config.ai || config.ai.devUI) {
+    // DevUI visibility per session:
+    // - Normal browser tabs (not Playwright-managed): always show DevUI
+    // - Playwright-managed tabs: follow the mode's devUI setting
+    const isManagedTab = (window as any).__IWER_MCP_MANAGED;
+    if (!config.ai || !isManagedTab || config.ai.devUI) {
       xrDevice.installDevUI(DevUI);
     }
 
@@ -170,8 +172,7 @@ function initDevRuntime(config: ProcessedDevOptions): void {
       }
 
       const mcpClient = initMCPClient(xrDevice, {
-        port: config.ai.port,
-        verbose: config.ai.verbose || config.verbose,
+        verbose: config.verbose,
       });
 
       // Expose MCP client for debugging

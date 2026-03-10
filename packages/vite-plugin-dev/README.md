@@ -58,15 +58,19 @@ iwsdkDev({
     userAgentException: /OculusBrowser/, // default
   },
 
+  // AI agent configuration — omit to disable entirely
   ai: {
-    // Run browser in headless mode
-    headless: false, // default
+    // Usage mode:
+    // 'agent' - headless Playwright, fixed viewport, no DevUI (default)
+    // 'oversight' - visible Playwright, freely resizable, no DevUI
+    // 'collaborate' - visible Playwright, freely resizable, DevUI on
+    mode: 'agent',
 
     // Which AI tools to generate MCP config for
-    tools: ['claude', 'cursor', 'copilot', 'codex'], // default
+    tools: ['claude'], // default
 
-    // Browser viewport / screenshot resolution
-    viewport: { width: 800, height: 800 }, // default
+    // Screenshot size constraint (viewport in agent mode, downscale bound otherwise)
+    screenshotSize: { width: 800, height: 800 }, // default
   },
 
   // Enable verbose logging
@@ -95,21 +99,38 @@ iwsdkDev({
 });
 ```
 
-### Headless AI Agent Mode
+### AI Agent Mode (default)
 
 ```javascript
 iwsdkDev({
   emulator: { device: 'metaQuest3' },
-  ai: { headless: true },
+  ai: { mode: 'agent', screenshotSize: { width: 500, height: 500 } },
 });
 ```
 
-### Disable AI Tooling
+### Collaborate Mode (human + agent share session)
 
 ```javascript
 iwsdkDev({
   emulator: { device: 'metaQuest3' },
-  ai: false,
+  ai: { mode: 'collaborate' },
+});
+```
+
+### Oversight Mode (watch the agent)
+
+```javascript
+iwsdkDev({
+  emulator: { device: 'metaQuest3' },
+  ai: { mode: 'oversight' },
+});
+```
+
+### AI Disabled
+
+```javascript
+iwsdkDev({
+  emulator: { device: 'metaQuest3' },
 });
 ```
 
@@ -123,6 +144,7 @@ import {
   type DevPluginOptions,
   type EmulatorOptions,
   type AiOptions,
+  type AiMode,
 } from '@iwsdk/vite-plugin-dev';
 ```
 

@@ -17,10 +17,7 @@ import {
   launchManagedBrowser,
   type ManagedBrowser,
 } from './headless-browser.js';
-import {
-  reportSessionStart,
-  reportSessionEnd,
-} from './hzdb-telemetry.js';
+import { reportSessionStart, reportSessionEnd } from './hzdb-telemetry.js';
 import { buildInjectionBundle } from './injection-bundler.js';
 import { createRelayHandler } from './mcp-relay.js';
 import type {
@@ -28,17 +25,18 @@ import type {
   ProcessedDevOptions,
   InjectionBundleResult,
   AiTool,
+  AiMode,
 } from './types.js';
 
 // Export types for users
 export type {
   DevPluginOptions,
   AiOptions,
+  AiMode,
   EmulatorOptions,
   ProcessedDevOptions,
   IWERPluginOptions,
   SEMOptions,
-  MCPOptions,
   AiTool,
 } from './types.js';
 
@@ -290,6 +288,18 @@ function warmupRagMcp(ragMcpServerPath: string, verbose: boolean): void {
 }
 
 /**
+ * Derive internal headless / devUI / viewport settings from the AI mode.
+ */
+const MODE_SETTINGS: Record<
+  AiMode,
+  { headless: boolean; devUI: boolean; fixedViewport: boolean }
+> = {
+  agent: { headless: true, devUI: false, fixedViewport: true },
+  oversight: { headless: false, devUI: false, fixedViewport: false },
+  collaborate: { headless: false, devUI: true, fixedViewport: false },
+};
+
+/**
  * Process and normalize plugin options with defaults
  */
 function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
@@ -310,30 +320,32 @@ function processOptions(options: DevPluginOptions = {}): ProcessedDevOptions {
     };
   }
 
-  // Process AI options - enabled by default unless explicitly disabled
-  const aiOption = options.ai ?? true;
-  if (aiOption) {
-    if (typeof aiOption === 'boolean') {
-      processed.ai = {
-        verbose: false,
-        tools: ['claude', 'cursor', 'copilot', 'codex'],
-        headless: false,
-        viewport: { width: 800, height: 800 },
-        devUI: true,
-      };
-    } else {
-      processed.ai = {
-        port: aiOption.port,
-        verbose: aiOption.verbose ?? false,
-        tools: aiOption.tools ?? ['claude', 'cursor', 'copilot', 'codex'],
-        headless: aiOption.headless ?? false,
-        viewport: {
-          width: aiOption.viewport?.width ?? 800,
-          height: aiOption.viewport?.height ?? 800,
-        },
-        devUI: aiOption.devUI ?? true,
-      };
+  // AI is opt-in: omit `ai` to disable entirely
+  if (options.ai) {
+    const mode = options.ai.mode ?? 'agent';
+    const settings = MODE_SETTINGS[mode];
+    if (!settings) {
+      const valid = Object.keys(MODE_SETTINGS).join(', ');
+      throw new Error(
+        `[IWSDK] Invalid ai.mode "${mode}". Valid modes: ${valid}`,
+      );
     }
+    const ssInput = options.ai.screenshotSize;
+    const ssWidth = ssInput?.width;
+    const ssHeight = ssInput?.height;
+    const screenshotSize = {
+      width: ssWidth ?? ssHeight ?? 800,
+      height: ssHeight ?? ssWidth ?? 800,
+    };
+
+    processed.ai = {
+      mode,
+      tools: options.ai.tools ?? ['claude'],
+      headless: settings.headless,
+      devUI: settings.devUI,
+      viewport: settings.fixedViewport ? screenshotSize : null,
+      screenshotSize,
+    };
   }
 
   return processed;
@@ -356,10 +368,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
     name: 'iwsdk-dev',
 
     config(userConfig) {
-      // Suppress Vite's auto-open — Playwright manages the browser tab.
-      // Mutate userConfig directly since plugin return values have lower
-      // precedence and would be overridden by the user's `open: true`.
-      if (pluginOptions.ai) {
+      // In oversight/collaborate mode the Playwright window IS the visible
+      // browser, so suppress Vite's auto-open to avoid a duplicate tab.
+      if (pluginOptions.ai && !pluginOptions.ai.headless) {
         if (userConfig.server) {
           userConfig.server.open = false;
         } else {
@@ -377,7 +388,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         console.log(
           `  - SEM: ${pluginOptions.sem ? 'enabled (' + pluginOptions.sem.defaultScene + ')' : 'disabled'}`,
         );
-        console.log(`  - AI: ${pluginOptions.ai ? 'enabled' : 'disabled'}`);
+        console.log(
+          `  - AI: ${pluginOptions.ai ? `enabled (${pluginOptions.ai.mode} mode)` : 'disabled'}`,
+        );
         console.log(`  - Activation: ${pluginOptions.activation}`);
         if (pluginOptions.userAgentException) {
           console.log('  - UA exception: enabled');
@@ -395,8 +408,6 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       let browserLaunchPromise: Promise<void> | null = null;
       let serverShuttingDown = false;
       let browserUrl = '';
-      let browserHeadless = false;
-      let browserViewport = { width: 800, height: 800 };
       let consecutiveFailures = 0;
       const MAX_LAUNCH_FAILURES = 3;
 
@@ -414,21 +425,22 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           try {
             const browser = await launchManagedBrowser(
               browserUrl,
-              browserHeadless,
+              pluginOptions.ai!.headless,
               pluginOptions.verbose,
-              browserViewport,
+              pluginOptions.ai!.viewport,
+              pluginOptions.ai!.screenshotSize,
             );
             managedBrowser = browser;
             consecutiveFailures = 0;
 
-            // Re-launch on unexpected close (user closed the window, crash, etc.)
+            // On unexpected close, mark as null. The browser will be
+            // relaunched lazily on the next MCP request via ensureBrowser().
             browser.onClose(() => {
               managedBrowser = null;
               if (!serverShuttingDown) {
                 console.log(
-                  '🔄 IWSDK: Browser closed unexpectedly, re-launching...',
+                  '🔄 IWSDK: Browser closed. Will relaunch on next MCP request.',
                 );
-                launchBrowser();
               }
             });
           } catch (error) {
@@ -450,18 +462,23 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
       /**
        * Return the current managed browser, re-launching if it was closed.
-       * Returns null if the browser cannot be launched.
+       * `relaunched` is true when the browser was just freshly launched
+       * (meaning the previous page state was lost).
        */
-      const ensureBrowser = async (): Promise<ManagedBrowser | null> => {
-        if (managedBrowser && !managedBrowser.isClosed()) {
-          return managedBrowser;
+      const ensureBrowser = async (): Promise<{
+        browser: ManagedBrowser | null;
+        relaunched: boolean;
+      }> => {
+        const current = managedBrowser;
+        if (current && !current.isClosed()) {
+          return { browser: current, relaunched: false };
         }
         managedBrowser = null;
         if (consecutiveFailures >= MAX_LAUNCH_FAILURES) {
-          return null;
+          return { browser: null, relaunched: false };
         }
         await launchBrowser();
-        return managedBrowser;
+        return { browser: managedBrowser, relaunched: managedBrowser !== null };
       };
 
       // Initialize WebSocket server and client tracking
@@ -470,7 +487,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
       // First-response-wins relay handler (extracted for testability)
       const relay = createRelayHandler({
-        verbose: pluginOptions.ai?.verbose,
+        verbose: pluginOptions.verbose,
       });
 
       // Clean up stale entries every 60 seconds
@@ -482,13 +499,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       mcpWss.on('connection', (ws: WebSocket) => {
         mcpClients!.add(ws);
 
-        if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
+        if (pluginOptions.verbose) {
           console.log('[IWSDK-MCP] Client connected');
         }
 
         ws.on('message', async (data: Buffer) => {
           const message = data.toString();
-          if (pluginOptions.ai?.verbose) {
+          if (pluginOptions.verbose) {
             console.log(
               '[IWSDK-MCP] Message received:',
               message.substring(0, 100),
@@ -501,24 +518,47 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           try {
             const parsed = JSON.parse(message);
 
+            const BROWSER_RELAUNCHED_RESULT = {
+              status: 'browser_relaunched',
+              message:
+                'Browser was closed and has been relaunched. ' +
+                'The page state has been reset — please retry your request.',
+            };
+
             // Console logs: Playwright captures via CDP
             if (parsed.method === 'get_console_logs' && parsed.id) {
               intercepted = true;
-              const params = parsed.params ?? {};
-              if (!params.level) {
-                params.level = ['log', 'info', 'warn', 'error'];
+              const { browser, relaunched } = await ensureBrowser();
+              if (relaunched) {
+                ws.send(
+                  JSON.stringify({
+                    id: parsed.id,
+                    result: BROWSER_RELAUNCHED_RESULT,
+                  }),
+                );
+              } else {
+                const params = parsed.params ?? {};
+                if (!params.level) {
+                  params.level = ['log', 'info', 'warn', 'error'];
+                }
+                const result = browser ? browser.queryLogs(params) : [];
+                ws.send(JSON.stringify({ id: parsed.id, result }));
               }
-              const browser = await ensureBrowser();
-              const result = browser ? browser.queryLogs(params) : [];
-              ws.send(JSON.stringify({ id: parsed.id, result }));
             }
 
             // Screenshot: Playwright captures via CDP compositor
             if (!intercepted && parsed.method === 'screenshot' && parsed.id) {
               intercepted = true;
               try {
-                const browser = await ensureBrowser();
-                if (browser) {
+                const { browser, relaunched } = await ensureBrowser();
+                if (relaunched) {
+                  ws.send(
+                    JSON.stringify({
+                      id: parsed.id,
+                      result: BROWSER_RELAUNCHED_RESULT,
+                    }),
+                  );
+                } else if (browser) {
                   const buffer = await browser.screenshot();
                   const base64 = buffer.toString('base64');
                   ws.send(
@@ -558,13 +598,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
         ws.on('close', () => {
           mcpClients!.delete(ws);
-          if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
+          if (pluginOptions.verbose) {
             console.log('[IWSDK-MCP] Client disconnected');
           }
         });
 
         ws.on('error', (error) => {
-          if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
+          if (pluginOptions.verbose) {
             console.error('[IWSDK-MCP] WebSocket error:', error);
           }
         });
@@ -576,7 +616,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           return;
         }
 
-        if (pluginOptions.ai?.verbose || pluginOptions.verbose) {
+        if (pluginOptions.verbose) {
           console.log('[IWSDK-MCP] WebSocket upgrade request received');
         }
 
@@ -750,11 +790,6 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         // Launch Playwright-managed browser
         const protocol = server.config.server.https ? 'https' : 'http';
         browserUrl = `${protocol}://localhost:${actualPort}`;
-        browserHeadless = pluginOptions.ai?.headless ?? false;
-        browserViewport = pluginOptions.ai?.viewport ?? {
-          width: 800,
-          height: 800,
-        };
         launchBrowser();
       });
 
@@ -922,7 +957,9 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           }
 
           if (pluginOptions.ai) {
-            console.log('  - AI: enabled (WebSocket at /__iwer_mcp)');
+            console.log(
+              `  - AI: ${pluginOptions.ai.mode} mode (WebSocket at /__iwer_mcp)`,
+            );
           }
 
           if (pluginOptions.activation === 'localhost') {

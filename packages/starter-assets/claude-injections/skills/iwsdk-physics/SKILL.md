@@ -94,13 +94,13 @@ entity.addComponent(PhysicsShape, {
 
 **Properties:**
 
-| Property      | Type               | Default     | Description                                      |
-| ------------- | ------------------ | ----------- | ------------------------------------------------ |
-| `shape`       | `PhysicsShapeType` | `Auto`      | Collision shape type                             |
+| Property      | Type               | Default     | Description                                                                           |
+| ------------- | ------------------ | ----------- | ------------------------------------------------------------------------------------- |
+| `shape`       | `PhysicsShapeType` | `Auto`      | Collision shape type                                                                  |
 | `dimensions`  | `Vec3`             | `[0, 0, 0]` | Shape-specific dimensions array. Not applicable when `PhysicsShapeType.Auto` is used. |
-| `density`     | `Float32`          | `1.0`       | Mass density (kg/m^3). Higher = heavier.         |
-| `restitution` | `Float32`          | `0.0`       | Bounciness (0 = no bounce, 1 = perfect bounce)   |
-| `friction`    | `Float32`          | `0.5`       | Surface friction (0 = ice, 1 = rubber)           |
+| `density`     | `Float32`          | `1.0`       | Mass density (kg/m^3). Higher = heavier.                                              |
+| `restitution` | `Float32`          | `0.0`       | Bounciness (0 = no bounce, 1 = perfect bounce)                                        |
+| `friction`    | `Float32`          | `0.5`       | Surface friction (0 = ice, 1 = rubber)                                                |
 
 ### PhysicsShapeType Enum
 
@@ -117,14 +117,14 @@ PhysicsShapeType.Auto; // Auto-detect from Three.js geometry type
 
 The `dimensions` property is a `Vec3` (`[x, y, z]`) whose meaning changes depending on the selected shape:
 
-| Shape Type    | `dimensions[0]` | `dimensions[1]` | `dimensions[2]` | Example                          |
-| ------------- | ---------------- | ---------------- | ---------------- | -------------------------------- |
-| `Sphere`      | radius           | _(unused)_       | _(unused)_       | `[0.5, 0, 0]` -- sphere r=0.5   |
-| `Box`         | width            | height           | depth            | `[1, 2, 0.5]` -- 1×2×0.5 box    |
-| `Cylinder`    | radius           | height           | _(unused)_       | `[0.3, 1.5, 0]` -- r=0.3, h=1.5 |
-| `ConvexHull`  | _(ignored)_      | _(ignored)_      | _(ignored)_      | Computed from mesh vertices      |
-| `TriMesh`     | _(ignored)_      | _(ignored)_      | _(ignored)_      | Computed from mesh triangles     |
-| `Auto`        | _(ignored)_      | _(ignored)_      | _(ignored)_      | Auto-detected from geometry      |
+| Shape Type   | `dimensions[0]` | `dimensions[1]` | `dimensions[2]` | Example                         |
+| ------------ | --------------- | --------------- | --------------- | ------------------------------- |
+| `Sphere`     | radius          | _(unused)_      | _(unused)_      | `[0.5, 0, 0]` -- sphere r=0.5   |
+| `Box`        | width           | height          | depth           | `[1, 2, 0.5]` -- 1×2×0.5 box    |
+| `Cylinder`   | radius          | height          | _(unused)_      | `[0.3, 1.5, 0]` -- r=0.3, h=1.5 |
+| `ConvexHull` | _(ignored)_     | _(ignored)_     | _(ignored)_     | Computed from mesh vertices     |
+| `TriMesh`    | _(ignored)_     | _(ignored)_     | _(ignored)_     | Computed from mesh triangles    |
+| `Auto`       | _(ignored)_     | _(ignored)_     | _(ignored)_     | Auto-detected from geometry     |
 
 For `ConvexHull`, `TriMesh`, and `Auto`, the dimensions array is not used -- the shape is derived directly from the entity's Three.js geometry.
 

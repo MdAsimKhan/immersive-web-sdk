@@ -39,6 +39,7 @@ const pluginConfig = {
     '@iwer/sem',
     'ws',
     'playwright',
+    'sharp',
     'os',
     'crypto',
   ],

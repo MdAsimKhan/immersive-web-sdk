@@ -49,7 +49,11 @@ World.create(document.getElementById('scene-container'), {
     sessionMode: SessionMode.ImmersiveAR,
     referenceSpace: ReferenceSpaceType.Unbounded,
     features: {
-      depthSensing: { required: true, usage: 'gpu-optimized', format: 'float32' },
+      depthSensing: {
+        required: true,
+        usage: 'gpu-optimized',
+        format: 'float32',
+      },
       anchors: { required: true },
       unbounded: { required: true },
     },
@@ -89,7 +93,7 @@ World.create(container, {
       depthSensing: {
         required: true,
         usage: 'gpu-optimized', // or 'cpu-optimized'
-        format: 'float32',      // or 'luminance-alpha'
+        format: 'float32', // or 'luminance-alpha'
       },
       anchors: { required: true },
       unbounded: { required: true },
@@ -98,10 +102,10 @@ World.create(container, {
 });
 ```
 
-| Option   | Values                                    | Description                                  |
-| -------- | ----------------------------------------- | -------------------------------------------- |
-| `usage`  | `'gpu-optimized'`, `'cpu-optimized'`      | How depth data is delivered to the application |
-| `format` | `'float32'`, `'luminance-alpha'`          | Precision of depth values                     |
+| Option   | Values                               | Description                                    |
+| -------- | ------------------------------------ | ---------------------------------------------- |
+| `usage`  | `'gpu-optimized'`, `'cpu-optimized'` | How depth data is delivered to the application |
+| `format` | `'float32'`, `'luminance-alpha'`     | Precision of depth values                      |
 
 **`gpu-optimized`** delivers depth as a GPU texture array and is the recommended path for occlusion. **`cpu-optimized`** provides per-pixel depth buffers accessible on the CPU, useful when you need to read individual depth values in JavaScript.
 
@@ -111,10 +115,10 @@ World.create(container, {
 world
   .registerSystem(DepthSensingSystem, {
     configData: {
-      enableOcclusion: true,   // Master toggle for occlusion rendering
+      enableOcclusion: true, // Master toggle for occlusion rendering
       enableDepthTexture: true, // Create/update depth textures each frame
-      useFloat32: true,         // Use Float32 depth data (higher precision)
-      blurRadius: 20.0,         // Blur radius in pixels for SoftOcclusion mode
+      useFloat32: true, // Use Float32 depth data (higher precision)
+      blurRadius: 20.0, // Blur radius in pixels for SoftOcclusion mode
     },
   })
   .registerComponent(DepthOccludable);
@@ -160,11 +164,11 @@ entity.addComponent(DepthOccludable, {
 
 Controls the algorithm used to determine occlusion at each fragment.
 
-| Mode                  | Samples per Fragment | Extra GPU Passes | Quality                              | Performance |
-| --------------------- | -------------------- | ---------------- | ------------------------------------ | ----------- |
-| `SoftOcclusion`       | 13 (two-ring blur)   | None             | Smooth edges, may bleed at depth discontinuities | Moderate    |
-| `HardOcclusion`       | 1                    | None             | Sharp edges, may alias               | Fastest     |
-| `MinMaxSoftOcclusion` | 1 (preprocessed)     | 1 fullscreen pass per eye | Edge-aware smooth, preserves depth boundaries | Highest cost |
+| Mode                  | Samples per Fragment | Extra GPU Passes          | Quality                                          | Performance  |
+| --------------------- | -------------------- | ------------------------- | ------------------------------------------------ | ------------ |
+| `SoftOcclusion`       | 13 (two-ring blur)   | None                      | Smooth edges, may bleed at depth discontinuities | Moderate     |
+| `HardOcclusion`       | 1                    | None                      | Sharp edges, may alias                           | Fastest      |
+| `MinMaxSoftOcclusion` | 1 (preprocessed)     | 1 fullscreen pass per eye | Edge-aware smooth, preserves depth boundaries    | Highest cost |
 
 - **`SoftOcclusion`** is the default and works well for most cases. It uses a 13-tap sampling pattern (center + inner ring + outer ring) controlled by the `blurRadius` config.
 - **`HardOcclusion`** does a single depth lookup per fragment. It's the cheapest option but produces hard edges that can look aliased.

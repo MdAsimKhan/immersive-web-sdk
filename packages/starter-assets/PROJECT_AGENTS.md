@@ -231,14 +231,14 @@ entity.addComponent(ScreenSpace, { width: '400px', top: '20px' });
 
 Semantic code search and API lookup for IWSDK, elics ECS, and dependencies.
 
-| Tool                    | Purpose                      | When to Use                                              |
-| ----------------------- | ---------------------------- | -------------------------------------------------------- |
-| `search_code`           | Semantic search across IWSDK | Finding code by description ("how to create VR session") |
-| `get_api_reference`     | Quick API lookup by name     | When you know the class/function name                    |
-| `find_by_relationship`  | Find code by relationships   | Classes that extend/implement something                  |
-| `list_ecs_components`   | List all ECS components      | Discovering available components                         |
-| `list_ecs_systems`      | List all ECS systems         | Discovering available systems                            |
-| `find_usage_examples`   | Find real-world examples     | Understanding how to use an API                          |
+| Tool                   | Purpose                      | When to Use                                              |
+| ---------------------- | ---------------------------- | -------------------------------------------------------- |
+| `search_code`          | Semantic search across IWSDK | Finding code by description ("how to create VR session") |
+| `get_api_reference`    | Quick API lookup by name     | When you know the class/function name                    |
+| `find_by_relationship` | Find code by relationships   | Classes that extend/implement something                  |
+| `list_ecs_components`  | List all ECS components      | Discovering available components                         |
+| `list_ecs_systems`     | List all ECS systems         | Discovering available systems                            |
+| `find_usage_examples`  | Find real-world examples     | Understanding how to use an API                          |
 
 ### IWER (Immersive Web Emulation Runtime)
 
@@ -324,32 +324,32 @@ Tools for Meta Quest device management and Meta's 3D asset library.
 
 **3D Asset Search**
 
-| Tool                 | Purpose                                                                                     |
-| -------------------- | ------------------------------------------------------------------------------------------- |
+| Tool                 | Purpose                                                                                         |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
 | `meta_assets_search` | Search Meta's 3D model library by text description. Returns GLB/FBX download URLs and previews. |
 
 Use `meta_assets_search` to find ready-made 3D models (e.g., "spaceship", "office chair", "fantasy sword"). Download the GLB URL to `public/gltf/` and add it to your `AssetManifest`.
 
 **Device Management** (requires a connected Quest via USB or WiFi ADB)
 
-| Tool                       | Purpose                                               |
-| -------------------------- | ----------------------------------------------------- |
-| `device_list`              | List connected Quest devices                          |
-| `device_info`              | Device model, Android version, serial number          |
-| `device_battery`           | Battery level, charging status, temperature           |
-| `device_wake`              | Wake headset from sleep                               |
-| `device_proximity_sensor`  | Disable proximity sensor to keep headset awake on desk |
-| `get_device_logcat`        | Read device logs with tag/level/package filtering     |
-| `push_file` / `pull_file`  | Transfer files to/from the device                     |
+| Tool                      | Purpose                                                |
+| ------------------------- | ------------------------------------------------------ |
+| `device_list`             | List connected Quest devices                           |
+| `device_info`             | Device model, Android version, serial number           |
+| `device_battery`          | Battery level, charging status, temperature            |
+| `device_wake`             | Wake headset from sleep                                |
+| `device_proximity_sensor` | Disable proximity sensor to keep headset awake on desk |
+| `get_device_logcat`       | Read device logs with tag/level/package filtering      |
+| `push_file` / `pull_file` | Transfer files to/from the device                      |
 
 These are device action tools, not IWSDK development tools. Useful for checking device health or transferring files, but not part of the typical code-build-test loop.
 
 **Quest Platform Documentation**
 
-| Tool                   | Purpose                                        |
-| ---------------------- | ---------------------------------------------- |
-| `search_docs`          | Search Meta Quest developer documentation      |
-| `fetch_meta_quest_doc` | Fetch full content of a documentation page      |
+| Tool                   | Purpose                                    |
+| ---------------------- | ------------------------------------------ |
+| `search_docs`          | Search Meta Quest developer documentation  |
+| `fetch_meta_quest_doc` | Fetch full content of a documentation page |
 
 **Important:** Only use these for Quest platform questions (distribution policies, WebXR spec details, device capabilities). For IWSDK API and development questions, use `iwsdk-rag-local` instead — it returns actual source code and is significantly more accurate.
 
