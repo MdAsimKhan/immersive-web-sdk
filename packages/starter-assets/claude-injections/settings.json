@@ -41,18 +41,13 @@
       "mcp__iwsdk-rag-local__list_ecs_systems",
       "mcp__iwsdk-rag-local__find_dependents",
       "mcp__iwsdk-rag-local__find_usage_examples",
-      "Skill(catalog-assets)",
-      "Skill(click-target)",
+      "Skill(iwsdk-debug)",
+      "Skill(iwsdk-grab)",
       "Skill(iwsdk-physics)",
       "Skill(iwsdk-planner)",
-      "Skill(iwsdk-ui-panel)",
-      "Skill(preview-model)",
-      "Skill(xr-mode-test)"
+      "Skill(iwsdk-ray)",
+      "Skill(iwsdk-ui)"
     ]
   },
-  "enabledMcpjsonServers": ["iwsdk-dev-mcp", "iwsdk-rag-local"],
-  "enableAllProjectMcpServers": true,
-  "env": {
-    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
-  }
+  "enableAllProjectMcpServers": true
 }

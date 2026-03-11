@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import fs from 'fs';
 import fsp from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -66,7 +65,6 @@ describe('installDependenciesFromBundle', () => {
     },
     devDependencies: {
       '@iwsdk/vite-plugin-dev': '^0.1.0',
-      '@iwsdk/vite-plugin-gltf-optimizer': '^0.1.0',
       '@iwsdk/vite-plugin-uikitml': '^0.1.0',
       vitest: '^2.0.0',
     },
@@ -94,8 +92,6 @@ describe('installDependenciesFromBundle', () => {
         'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
-      '@iwsdk/vite-plugin-gltf-optimizer':
-        'file:.sdk-packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz',
       '@iwsdk/vite-plugin-uikitml':
         'file:.sdk-packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz',
     });
@@ -112,9 +108,6 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe(
       'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
     );
-    expect(pkg.devDependencies['@iwsdk/vite-plugin-gltf-optimizer']).toBe(
-      'file:.sdk-packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz',
-    );
     expect(pkg.devDependencies['@iwsdk/vite-plugin-uikitml']).toBe(
       'file:.sdk-packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz',
     );
@@ -127,8 +120,6 @@ describe('installDependenciesFromBundle', () => {
         'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
-      '@iwsdk/vite-plugin-gltf-optimizer':
-        'file:.sdk-packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz',
       '@iwsdk/vite-plugin-uikitml':
         'file:.sdk-packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz',
     });

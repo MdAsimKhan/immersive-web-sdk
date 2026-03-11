@@ -6,7 +6,6 @@
  */
 
 import { iwsdkDev } from '@iwsdk/vite-plugin-dev';
-import { optimizeGLTF } from '@iwsdk/vite-plugin-gltf-optimizer';
 /* @template:if kind='metaspatial' */
 import {
   discoverComponents,
@@ -45,9 +44,6 @@ export default defineConfig({
     }),
     /* @template:end */
     compileUIKit({ sourceDir: 'ui', outputDir: 'public/ui', verbose: true }),
-    optimizeGLTF({
-      level: 'medium',
-    }),
   ],
   server: { host: '0.0.0.0', port: 8081, open: true },
   build: {

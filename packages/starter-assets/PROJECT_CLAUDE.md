@@ -249,50 +249,54 @@ Use when:
 - Designing systems/components
 - Need guidance on ECS, signals, or reactive patterns
 
-### `/iwsdk-ui-panel`
+### `/iwsdk-grab`
 
-**Develop and iterate on IWSDK UI panels**
+**Grab objects with emulated controllers**
+
+Use when:
+
+- Picking up, moving, or testing grab interactions
+- Testing OneHandGrabbable or TwoHandsGrabbable (proximity-based, uses squeeze/grip button)
+
+### `/iwsdk-ray`
+
+**Ray-based interactions — click, select, distance-grab**
+
+Use when:
+
+- Pointing at and clicking objects or UI buttons
+- Distance-grabbing with DistanceGrabbable (trigger hold)
+- Testing ray-based selection on Interactable entities
+
+### `/iwsdk-ui`
+
+**Develop and iterate on UI panels**
 
 Use when:
 
 - Working on PanelUI components
-- Debugging UI layout
-- Improving UI design
+- Editing UIKITML markup
+- Using ScreenSpace for full-screen 2D preview during development
 
-### `/catalog-assets`
+### `/iwsdk-debug`
 
-**Catalog and index 3D model assets or image libraries**
-
-Use when:
-
-- Documenting or describing asset files (GLB models, textures, images)
-- Creating a searchable index of assets
-- Spawns parallel subagents to examine preview images and write descriptions
-
-Example:
-
-```
-/catalog-assets public/kenney_prototype-kit
-```
-
-### `/preview-model`
-
-**Preview a 3D model from the Kenney Prototype Kit in VR**
+**Debug continuous behavior frame by frame**
 
 Use when:
 
-- Wanting to see what a model looks like in the scene
-- Testing a model with different texture variations
-- Comparing models visually
+- Debugging physics (falling, bouncing, collisions)
+- Debugging animations, game loops, or any real-time behavior
+- Behavior happens too fast to observe — uses ECS pause/step/snapshot/diff
 
-Example:
+### `/iwsdk-physics`
 
-```
-/preview-model figurine
-/preview-model door-rotate b
-```
+**Physics implementation guide**
 
-The Kenney Prototype Kit is bundled at `public/kenney_prototype-kit/` and includes 143 models with 3 texture variations each.
+Use when:
+
+- Adding physics simulation (PhysicsBody, PhysicsShape)
+- Configuring rigid bodies, collision shapes, forces
+- Troubleshooting physics behavior
 
 ## Planning Rule
 
