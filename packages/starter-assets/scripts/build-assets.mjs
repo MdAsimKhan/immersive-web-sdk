@@ -85,7 +85,13 @@ const casIndex = new Map(); // hash -> relPath
 async function writeCasObject(casRoot, bytes, preferredName) {
   const hash = sha256(bytes);
   if (casIndex.has(hash)) return casIndex.get(hash);
-  const safeBase = (preferredName || 'asset').replace(/[^A-Za-z0-9._-]/g, '_');
+  let safeBase = (preferredName || 'asset').replace(/[^A-Za-z0-9._-]/g, '_');
+  // jsDelivr rejects path components >= 100 chars; hash is 64 + dash = 65
+  const maxSuffix = 99 - hash.length - 1;
+  if (safeBase.length > maxSuffix) {
+    const ext = path.extname(safeBase);
+    safeBase = safeBase.slice(0, maxSuffix - ext.length) + ext;
+  }
   const relPath = `${hash}-${safeBase}`;
   const absPath = path.join(casRoot, relPath);
   await ensureDir(path.dirname(absPath));
