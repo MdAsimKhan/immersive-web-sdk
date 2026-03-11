@@ -152,6 +152,90 @@ describe('mergeJsonConfig', () => {
       initial.mcpServers['my-custom-server'],
     );
   });
+
+  test('managedKeys removes stale managed keys while preserving user entries', async () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    const initial = {
+      mcpServers: {
+        'iwsdk-dev-mcp': { command: 'node', args: ['server.js'] },
+        'iwsdk-rag-local': { command: 'node', args: ['rag.js'] },
+        hzdb: { command: 'npx', args: ['hzdb', 'mcp'] },
+        'my-custom-server': { command: 'python', args: ['server.py'] },
+      },
+    };
+    await writeFile(filePath, JSON.stringify(initial, null, 2));
+
+    const managedKeys = ['iwsdk-dev-mcp', 'iwsdk-rag-local', 'hzdb'];
+    const entries = {
+      'iwsdk-dev-mcp': {
+        command: 'node',
+        args: ['server.js', '--port', '9999'],
+      },
+    };
+
+    await mergeJsonConfig(filePath, entries, 'mcpServers', managedKeys);
+
+    const parsed = JSON.parse(await readFile(filePath, 'utf-8'));
+    expect(parsed.mcpServers['iwsdk-dev-mcp'].args).toEqual([
+      'server.js',
+      '--port',
+      '9999',
+    ]);
+    expect(parsed.mcpServers['iwsdk-rag-local']).toBeUndefined();
+    expect(parsed.mcpServers['hzdb']).toBeUndefined();
+    expect(parsed.mcpServers['my-custom-server']).toEqual(
+      initial.mcpServers['my-custom-server'],
+    );
+  });
+
+  test('managedKeys keeps keys that are present in both managedKeys and serverEntries', async () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    const initial = {
+      mcpServers: {
+        'iwsdk-dev-mcp': { command: 'node', args: ['old.js'] },
+        'iwsdk-rag-local': { command: 'node', args: ['old-rag.js'] },
+      },
+    };
+    await writeFile(filePath, JSON.stringify(initial, null, 2));
+
+    const managedKeys = ['iwsdk-dev-mcp', 'iwsdk-rag-local', 'hzdb'];
+    const entries = {
+      'iwsdk-dev-mcp': { command: 'node', args: ['new.js'] },
+      'iwsdk-rag-local': { command: 'node', args: ['new-rag.js'] },
+    };
+
+    await mergeJsonConfig(filePath, entries, 'mcpServers', managedKeys);
+
+    const parsed = JSON.parse(await readFile(filePath, 'utf-8'));
+    expect(parsed.mcpServers['iwsdk-dev-mcp'].args).toEqual(['new.js']);
+    expect(parsed.mcpServers['iwsdk-rag-local'].args).toEqual(['new-rag.js']);
+    expect(parsed.mcpServers['hzdb']).toBeUndefined();
+  });
+
+  test('omitting managedKeys does not remove anything (backward compat)', async () => {
+    const filePath = path.join(tmpDir, '.mcp.json');
+    const initial = {
+      mcpServers: {
+        'iwsdk-dev-mcp': { command: 'node', args: ['old.js'] },
+        'iwsdk-rag-local': { command: 'node', args: ['rag.js'] },
+        hzdb: { command: 'npx', args: ['hzdb'] },
+      },
+    };
+    await writeFile(filePath, JSON.stringify(initial, null, 2));
+
+    const entries = {
+      'iwsdk-dev-mcp': { command: 'node', args: ['new.js'] },
+    };
+
+    await mergeJsonConfig(filePath, entries, 'mcpServers');
+
+    const parsed = JSON.parse(await readFile(filePath, 'utf-8'));
+    expect(parsed.mcpServers['iwsdk-dev-mcp'].args).toEqual(['new.js']);
+    expect(parsed.mcpServers['iwsdk-rag-local']).toEqual(
+      initial.mcpServers['iwsdk-rag-local'],
+    );
+    expect(parsed.mcpServers['hzdb']).toEqual(initial.mcpServers['hzdb']);
+  });
 });
 
 describe('unmergeJsonConfig', () => {

@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import { spawn } from 'child_process';
+import * as fs from 'fs';
 import * as os from 'os';
 import { chromium } from 'playwright';
 import sharp from 'sharp';
@@ -116,6 +118,67 @@ export interface ManagedBrowser {
   isClosed(): boolean;
 }
 
+let chromiumInstalled = false;
+let installPromise: Promise<void> | null = null;
+
+/**
+ * Verify the Chromium binary exists and install it automatically if missing.
+ * Uses a Promise guard so concurrent callers share one install attempt.
+ * On install failure the flag stays unset so the next retry can try again.
+ */
+async function ensureChromiumInstalled(): Promise<void> {
+  if (chromiumInstalled) return;
+  if (installPromise) return installPromise;
+
+  const execPath = chromium.executablePath();
+  if (fs.existsSync(execPath)) {
+    chromiumInstalled = true;
+    return;
+  }
+
+  installPromise = doChromiumInstall().finally(() => {
+    installPromise = null;
+  });
+  return installPromise;
+}
+
+async function doChromiumInstall(): Promise<void> {
+  console.log(
+    '\n🔧 IWSDK: Chromium browser not found. Installing (first time only)...\n',
+  );
+
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn('npx', ['playwright', 'install', 'chromium'], {
+      stdio: 'inherit',
+      shell: true,
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        chromiumInstalled = true;
+        console.log('\n✅ IWSDK: Chromium installed successfully.\n');
+        resolve();
+      } else {
+        reject(
+          new Error(
+            `Chromium installation failed (exit code ${code}). ` +
+              'Try running manually: npx playwright install chromium',
+          ),
+        );
+      }
+    });
+
+    child.on('error', (err) => {
+      reject(
+        new Error(
+          `Failed to start Chromium installer: ${err.message}. ` +
+            'Try running manually: npx playwright install chromium',
+        ),
+      );
+    });
+  });
+}
+
 export async function launchManagedBrowser(
   url: string,
   headless: boolean,
@@ -126,6 +189,8 @@ export async function launchManagedBrowser(
     height: 800,
   },
 ): Promise<ManagedBrowser> {
+  await ensureChromiumInstalled();
+
   // Select GPU backend based on platform
   const angleBackend =
     os.platform() === 'darwin'

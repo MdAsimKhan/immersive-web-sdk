@@ -64,12 +64,16 @@ const TOML_BLOCK_END = '# --- end IWER managed ---';
 
 /**
  * Merge our server entries into an existing (or new) JSON config file.
+ * When `managedKeys` is provided, any key in that list that is NOT in
+ * `serverEntries` is removed — this prevents stale entries from surviving
+ * across config changes (e.g. uninstalling an optional MCP server).
  * Returns true if the file was newly created.
  */
 export async function mergeJsonConfig(
   filePath: string,
   serverEntries: Record<string, unknown>,
   jsonKey: string,
+  managedKeys?: string[],
 ): Promise<boolean> {
   let existing: Record<string, unknown> = {};
   let created = false;
@@ -78,11 +82,17 @@ export async function mergeJsonConfig(
     const raw = await readFile(filePath, 'utf-8');
     existing = JSON.parse(raw);
   } catch {
-    // File doesn't exist or invalid JSON — start fresh
     created = true;
   }
 
   const section = (existing[jsonKey] as Record<string, unknown>) ?? {};
+  if (managedKeys) {
+    for (const key of managedKeys) {
+      if (!(key in serverEntries)) {
+        delete section[key];
+      }
+    }
+  }
   Object.assign(section, serverEntries);
   existing[jsonKey] = section;
 
@@ -95,6 +105,9 @@ export async function mergeJsonConfig(
  * Remove our managed server keys from a JSON config file.
  * If we originally created the file and the servers section is now empty
  * with no other top-level keys, delete the file entirely.
+ *
+ * @internal Not called by the plugin at runtime (MCP configs are left in
+ * place on shutdown). Kept as a tested utility for potential external use.
  */
 export async function unmergeJsonConfig(
   filePath: string,
@@ -187,6 +200,9 @@ export async function mergeTomlConfig(
 /**
  * Remove our managed TOML block from a config file.
  * If we originally created the file and it's now effectively empty, delete it.
+ *
+ * @internal Not called by the plugin at runtime (MCP configs are left in
+ * place on shutdown). Kept as a tested utility for potential external use.
  */
 export async function unmergeTomlConfig(
   filePath: string,
@@ -680,51 +696,45 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       const sessionId = randomUUID();
       const sessionStartTime = Date.now();
 
-      // Track which files we created (so cleanup can decide whether to delete them)
-      const filesWeCreated = new Set<string>();
-      // Track our managed server entry keys for JSON unmerge
-      const managedServerKeys: string[] = [];
-      // Track the in-flight config write so cleanup can await it
-      let configWritePromise: Promise<void> | null = null;
-
       const writeMcpConfigs = async (actualPort: number) => {
         const mcpServerArgs = [mcpServerPath, '--port', String(actualPort)];
         if (iwsdkVersion) {
           mcpServerArgs.push('--client-version', iwsdkVersion);
         }
 
+        // Build the full set of all possible managed entries, then remove
+        // those whose packages aren't installed. The full key list is passed
+        // as managedKeys so mergeJsonConfig can clean up stale entries from
+        // previous runs where a package was present but has since been removed.
         const serverEntries: Record<
           string,
-          { command: string; args: string[] }
+          { command: string; args: string[] } | undefined
         > = {
           'iwsdk-dev-mcp': {
             command: 'node',
             args: mcpServerArgs,
           },
+          'iwsdk-rag-local': existsSync(ragMcpServerPath)
+            ? { command: 'node', args: [ragMcpServerPath] }
+            : undefined,
+          hzdb: hzdbInstalled
+            ? { command: 'npx', args: ['@meta-quest/hzdb', 'mcp', 'server'] }
+            : undefined,
         };
 
-        // Only include RAG MCP server if the package is actually installed
-        if (existsSync(ragMcpServerPath)) {
-          serverEntries['iwsdk-rag-local'] = {
-            command: 'node',
-            args: [ragMcpServerPath],
-          };
+        const managedKeys = Object.keys(serverEntries);
+        const activeEntries: Record<
+          string,
+          { command: string; args: string[] }
+        > = {};
+        for (const [key, value] of Object.entries(serverEntries)) {
+          if (value) {
+            activeEntries[key] = value;
+          }
         }
-
-        // Include hzdb MCP server if installed
-        if (hzdbInstalled) {
-          serverEntries['hzdb'] = {
-            command: 'npx',
-            args: ['@meta-quest/hzdb', 'mcp', 'server'],
-          };
-        }
-
-        // Remember which keys we manage for cleanup
-        managedServerKeys.length = 0;
-        managedServerKeys.push(...Object.keys(serverEntries));
 
         const tools = pluginOptions.ai!.tools;
-        const writes: Promise<void>[] = [];
+        const writes: Promise<unknown>[] = [];
 
         for (const tool of tools) {
           const target = MCP_CONFIG_TARGETS[tool];
@@ -732,22 +742,15 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
           if (target.format === 'json') {
             writes.push(
-              mergeJsonConfig(filePath, serverEntries, target.jsonKey!).then(
-                (created) => {
-                  if (created) {
-                    filesWeCreated.add(filePath);
-                  }
-                },
+              mergeJsonConfig(
+                filePath,
+                activeEntries,
+                target.jsonKey!,
+                managedKeys,
               ),
             );
           } else {
-            writes.push(
-              mergeTomlConfig(filePath, serverEntries).then((created) => {
-                if (created) {
-                  filesWeCreated.add(filePath);
-                }
-              }),
-            );
+            writes.push(mergeTomlConfig(filePath, activeEntries));
           }
         }
 
@@ -774,7 +777,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           typeof address === 'object' && address
             ? address.port
             : server.config.server.port || 5173;
-        configWritePromise = writeMcpConfigs(actualPort);
+        writeMcpConfigs(actualPort);
 
         // Report session start to hzdb telemetry (fire-and-forget via npx)
         reportSessionStart(sessionId, {
@@ -793,7 +796,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         launchBrowser();
       });
 
-      // Clean up WebSocket server and MCP config files when Vite server closes
+      // Clean up WebSocket server and browser when Vite server closes.
+      // MCP config files (.mcp.json, .cursor/mcp.json, etc.) are intentionally
+      // left in place — they are harmless when the dev server isn't running and
+      // will be overwritten with fresh values on the next `npm run dev`.
       server.httpServer?.on('close', () => {
         serverShuttingDown = true;
 
@@ -812,45 +818,10 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           mcpWss = null;
         }
 
-        const doCleanup = async () => {
-          // Close managed browser
-          if (managedBrowser) {
-            await managedBrowser.close().catch(() => {});
-            managedBrowser = null;
-          }
-
-          // Wait for any in-flight config write to finish before cleaning up
-          if (configWritePromise) {
-            await configWritePromise.catch(() => {});
-          }
-
-          // Remove our managed entries from all configured MCP config files
-          const tools = pluginOptions.ai!.tools;
-          const cleanups: Promise<void>[] = [];
-
-          for (const tool of tools) {
-            const target = MCP_CONFIG_TARGETS[tool];
-            const filePath = path.join(config.root, target.file);
-            const weCreated = filesWeCreated.has(filePath);
-
-            if (target.format === 'json') {
-              cleanups.push(
-                unmergeJsonConfig(
-                  filePath,
-                  managedServerKeys,
-                  target.jsonKey!,
-                  weCreated,
-                ),
-              );
-            } else {
-              cleanups.push(unmergeTomlConfig(filePath, weCreated));
-            }
-          }
-
-          await Promise.allSettled(cleanups);
-        };
-
-        doCleanup().catch(() => {});
+        if (managedBrowser) {
+          managedBrowser.close().catch(() => {});
+          managedBrowser = null;
+        }
       });
     },
 
