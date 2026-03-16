@@ -50,6 +50,14 @@ export default {
       'window.__THREE__': 'window.__THREE__IWER__',
       preventAssignment: false,
     }),
+    // Offset the @pmndrs/pointer-events pointer ID counter so the injection
+    // bundle's copy doesn't collide with the app's copy — both share the
+    // global registry `globalThis.pointerEventspointerMap`.
+    replace({
+      'let pointerIdCounter = 23412': 'let pointerIdCounter = 99412',
+      delimiters: ['', ''],
+      preventAssignment: false,
+    }),
   ],
   external: [], // Bundle everything now that we have JSON support
 };
