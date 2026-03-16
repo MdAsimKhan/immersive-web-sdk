@@ -12,7 +12,7 @@ import {
   MassProperties,
   MotionType,
 } from '@babylonjs/havok';
-import { createSystem, Entity, ne, Pressed, Types } from '.././index.js';
+import { createSystem, Entity, ne, Types, Grabbed } from '.././index.js';
 import {
   Vector3,
   Mesh,
@@ -174,7 +174,7 @@ export class PhysicsSystem extends createSystem(
           const position = entity.object3D.position;
           const quaternion = entity.object3D.quaternion;
 
-          if (entity.hasComponent(Pressed)) {
+          if (entity.hasComponent(Grabbed)) {
             this.havok.HP_Body_SetTargetQTransform(
               [BigInt(engineBody)],
               [

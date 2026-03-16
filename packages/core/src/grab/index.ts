@@ -13,6 +13,7 @@ import {
 } from './pointer-events-patch.js';
 
 export * from './grab-system.js';
+export * from './grabbed.js';
 export * from './one-hand-grabbable.js';
 export * from './two-hands-grabbable.js';
 export * from './distance-grabbable.js';

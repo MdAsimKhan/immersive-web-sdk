@@ -16,6 +16,7 @@ import {
   Quaternion,
 } from '../runtime/index.js';
 import { DistanceGrabbable } from './distance-grabbable.js';
+import { Grabbed } from './grabbed.js';
 import { DistanceGrabHandle, MovementMode, Handle } from './handles.js';
 import { OneHandGrabbable } from './one-hand-grabbable.js';
 import { TwoHandsGrabbable } from './two-hands-grabbable.js';
@@ -82,6 +83,9 @@ export class GrabSystem extends createSystem(
     // Ensure Handle component is registered in the world before queries rely on it
     if (!Handle.bitmask) {
       this.world.registerComponent(Handle);
+    }
+    if (!Grabbed.bitmask) {
+      this.world.registerComponent(Grabbed);
     }
 
     // Reactive handle creation per grabbable type
@@ -154,6 +158,14 @@ export class GrabSystem extends createSystem(
         | undefined;
       if (h) {
         h.update(delta);
+        // Manage Grabbed tag based on active grab state
+        if (h.inputState.size > 0) {
+          if (!entity.hasComponent(Grabbed)) {
+            entity.addComponent(Grabbed);
+          }
+        } else if (entity.hasComponent(Grabbed)) {
+          entity.removeComponent(Grabbed);
+        }
       }
     });
   }

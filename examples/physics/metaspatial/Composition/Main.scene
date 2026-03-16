@@ -15,8 +15,8 @@ entities:
         com.iwsdk.components.PhysicsBody:
           state: 0
         com.iwsdk.components.PhysicsShape:
-          restitution: 0
           shape: 5
+          restitution: 0
         com.meta.components.Animatable:
           {}
         com.meta.components.DocumentReference:
@@ -62,16 +62,16 @@ entities:
           visible: true
       tag: spawnableObjects
     - components:
-        com.iwsdk.components.DistanceGrabbable:
-          movementMode: 0
+        com.iwsdk.components.OneHandGrabbable:
+          {}
         com.iwsdk.components.PhysicsBody:
           {}
         com.iwsdk.components.PhysicsShape:
-          restitution: 0
           dimensions:
             - 1
             - 1
             - 1
+          restitution: 0
         com.iwsdk.components.RayInteractable:
           {}
         com.meta.components.Animatable:
@@ -106,8 +106,8 @@ entities:
         com.iwsdk.components.DistanceGrabbable:
           movementMode: 0
         com.iwsdk.components.PhysicsBody:
-          linearDamping: 1
           gravityFactor: 2
+          linearDamping: 1
         com.iwsdk.components.PhysicsShape:
           restitution: 0
         com.iwsdk.components.RayInteractable:
