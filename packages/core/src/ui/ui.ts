@@ -119,6 +119,7 @@ export class PanelUISystem extends createSystem(
   /** Configure transparent sort, set up DOM event forwarding, and reactive queries. */
   init(): void {
     this.renderer.setTransparentSort(reversePainterSortStable);
+    this.renderer.localClippingEnabled = true;
     this.config.forwardHtmlEvents.subscribe((forwarding) => {
       this.htmlHandler?.destroy();
       if (forwarding) {
