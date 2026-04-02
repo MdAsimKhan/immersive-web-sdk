@@ -1,5 +1,15 @@
 # @iwsdk/core
 
+## 0.3.1
+
+### Patch Changes
+
+- Truncate CAS asset filenames to stay under jsDelivr's 100-character path component limit, fixing 404 errors during project scaffolding.
+- Updated dependencies
+  - @iwsdk/glxf@0.3.1
+  - @iwsdk/locomotor@0.3.1
+  - @iwsdk/xr-input@0.3.1
+
 ## 0.3.0
 
 ### Minor Changes

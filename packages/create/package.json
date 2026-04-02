@@ -1,6 +1,6 @@
 {
   "name": "@iwsdk/create",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Interactive CLI to scaffold Immersive Web SDK starter apps",
   "type": "module",
   "private": false,
