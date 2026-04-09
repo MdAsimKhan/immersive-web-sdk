@@ -8,7 +8,6 @@
 import { spawn, type ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
 import { existsSync, readFileSync } from 'fs';
-import { writeFile, readFile, unlink, mkdir } from 'fs/promises';
 import * as path from 'path';
 import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import { WebSocketServer } from 'ws';
@@ -20,6 +19,16 @@ import {
 import { reportSessionStart, reportSessionEnd } from './hzdb-telemetry.js';
 import { buildInjectionBundle } from './injection-bundler.js';
 import { createRelayHandler } from './mcp-relay.js';
+import {
+  registerRuntimeSession,
+  setRuntimeSessionBrowserState,
+  unregisterRuntimeSession,
+} from './runtime-session.js';
+import type {
+  RuntimeBrowserState,
+  RuntimeIssueCause,
+  RuntimeIssueInfo,
+} from '@iwsdk/cli/contract';
 import type {
   DevPluginOptions,
   ProcessedDevOptions,
@@ -39,208 +48,6 @@ export type {
   SEMOptions,
   AiTool,
 } from './types.js';
-
-/**
- * MCP config target descriptor for each AI tool.
- */
-type McpConfigTarget = {
-  /** Path relative to project root */
-  file: string;
-  /** JSON key that holds server entries (null for TOML) */
-  jsonKey: string | null;
-  /** 'json' or 'toml' */
-  format: 'json' | 'toml';
-};
-
-const MCP_CONFIG_TARGETS: Record<AiTool, McpConfigTarget> = {
-  claude: { file: '.mcp.json', jsonKey: 'mcpServers', format: 'json' },
-  cursor: { file: '.cursor/mcp.json', jsonKey: 'mcpServers', format: 'json' },
-  copilot: { file: '.vscode/mcp.json', jsonKey: 'servers', format: 'json' },
-  codex: { file: '.codex/config.toml', jsonKey: null, format: 'toml' },
-};
-
-const TOML_BLOCK_START = '# --- IWER managed (do not edit) ---';
-const TOML_BLOCK_END = '# --- end IWER managed ---';
-
-/**
- * Merge our server entries into an existing (or new) JSON config file.
- * When `managedKeys` is provided, any key in that list that is NOT in
- * `serverEntries` is removed — this prevents stale entries from surviving
- * across config changes (e.g. uninstalling an optional MCP server).
- * Returns true if the file was newly created.
- */
-export async function mergeJsonConfig(
-  filePath: string,
-  serverEntries: Record<string, unknown>,
-  jsonKey: string,
-  managedKeys?: string[],
-): Promise<boolean> {
-  let existing: Record<string, unknown> = {};
-  let created = false;
-
-  try {
-    const raw = await readFile(filePath, 'utf-8');
-    existing = JSON.parse(raw);
-  } catch {
-    created = true;
-  }
-
-  const section = (existing[jsonKey] as Record<string, unknown>) ?? {};
-  if (managedKeys) {
-    for (const key of managedKeys) {
-      if (!(key in serverEntries)) {
-        delete section[key];
-      }
-    }
-  }
-  Object.assign(section, serverEntries);
-  existing[jsonKey] = section;
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, JSON.stringify(existing, null, 2) + '\n');
-  return created;
-}
-
-/**
- * Remove our managed server keys from a JSON config file.
- * If we originally created the file and the servers section is now empty
- * with no other top-level keys, delete the file entirely.
- *
- * @internal Not called by the plugin at runtime (MCP configs are left in
- * place on shutdown). Kept as a tested utility for potential external use.
- */
-export async function unmergeJsonConfig(
-  filePath: string,
-  serverKeys: string[],
-  jsonKey: string,
-  weCreatedFile: boolean,
-): Promise<void> {
-  let raw: string;
-  try {
-    raw = await readFile(filePath, 'utf-8');
-  } catch {
-    return; // file doesn't exist — no-op
-  }
-
-  let existing: Record<string, unknown>;
-  try {
-    existing = JSON.parse(raw);
-  } catch {
-    return; // invalid JSON — leave it alone
-  }
-
-  const section = existing[jsonKey] as Record<string, unknown> | undefined;
-  if (section) {
-    for (const key of serverKeys) {
-      delete section[key];
-    }
-    if (Object.keys(section).length === 0) {
-      delete existing[jsonKey];
-    }
-  }
-
-  if (weCreatedFile && Object.keys(existing).length === 0) {
-    try {
-      await unlink(filePath);
-    } catch {}
-  } else {
-    await writeFile(filePath, JSON.stringify(existing, null, 2) + '\n');
-  }
-}
-
-/**
- * Merge our managed TOML block into an existing (or new) config file.
- * Returns true if the file was newly created.
- */
-export async function mergeTomlConfig(
-  filePath: string,
-  serverEntries: Record<string, { command: string; args: string[] }>,
-): Promise<boolean> {
-  let existing = '';
-  let created = false;
-
-  try {
-    existing = await readFile(filePath, 'utf-8');
-  } catch {
-    created = true;
-  }
-
-  // Remove any old managed block
-  const startIdx = existing.indexOf(TOML_BLOCK_START);
-  const endIdx = existing.indexOf(TOML_BLOCK_END);
-  if (startIdx !== -1 && endIdx !== -1 && startIdx < endIdx) {
-    existing =
-      existing.slice(0, startIdx).trimEnd() +
-      '\n' +
-      existing.slice(endIdx + TOML_BLOCK_END.length).trimStart();
-    existing = existing.trim();
-  }
-
-  // Build new managed block
-  const tomlLines: string[] = [TOML_BLOCK_START];
-  for (const [name, entry] of Object.entries(serverEntries)) {
-    tomlLines.push(`[mcp_servers.${name}]`);
-    tomlLines.push(`command = ${JSON.stringify(entry.command)}`);
-    tomlLines.push(
-      `args = [${entry.args.map((a) => JSON.stringify(a)).join(', ')}]`,
-    );
-    tomlLines.push('');
-  }
-  tomlLines.push(TOML_BLOCK_END);
-
-  const newContent = existing
-    ? existing.trimEnd() + '\n\n' + tomlLines.join('\n') + '\n'
-    : tomlLines.join('\n') + '\n';
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, newContent);
-  return created;
-}
-
-/**
- * Remove our managed TOML block from a config file.
- * If we originally created the file and it's now effectively empty, delete it.
- *
- * @internal Not called by the plugin at runtime (MCP configs are left in
- * place on shutdown). Kept as a tested utility for potential external use.
- */
-export async function unmergeTomlConfig(
-  filePath: string,
-  weCreatedFile: boolean,
-): Promise<void> {
-  let existing: string;
-  try {
-    existing = await readFile(filePath, 'utf-8');
-  } catch {
-    return; // file doesn't exist — no-op
-  }
-
-  const startIdx = existing.indexOf(TOML_BLOCK_START);
-  const endIdx = existing.indexOf(TOML_BLOCK_END);
-  if (startIdx === -1 || endIdx === -1 || startIdx >= endIdx) {
-    // No managed block found — nothing to remove
-    if (weCreatedFile && existing.trim() === '') {
-      try {
-        await unlink(filePath);
-      } catch {}
-    }
-    return;
-  }
-
-  const cleaned =
-    existing.slice(0, startIdx).trimEnd() +
-    '\n' +
-    existing.slice(endIdx + TOML_BLOCK_END.length).trimStart();
-  const result = cleaned.trim();
-
-  if (weCreatedFile && result === '') {
-    try {
-      await unlink(filePath);
-    } catch {}
-  } else {
-    await writeFile(filePath, result + '\n');
-  }
-}
 
 /**
  * Warm up the RAG MCP server by spawning it and waiting for initialization.
@@ -422,10 +229,52 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
       // Closure-scoped state for browser auto-recovery
       let browserLaunchPromise: Promise<void> | null = null;
+      let browserRuntimeClients: Set<WebSocket> | null = null;
       let serverShuttingDown = false;
       let browserUrl = '';
       let consecutiveFailures = 0;
       const MAX_LAUNCH_FAILURES = 3;
+
+      const createBrowserIssue = (
+        cause: RuntimeIssueCause,
+        message: string,
+      ): RuntimeIssueInfo => ({
+        cause,
+        message,
+        at: new Date().toISOString(),
+      });
+
+      const classifyBrowserLaunchFailure = (message: string): RuntimeIssueCause =>
+        /permission|not permitted|denied|sandbox|eacces|eperm/i.test(message)
+          ? 'permission_denied'
+          : 'browser_launch_failed';
+
+      const createBrowserState = (
+        status: RuntimeBrowserState['status'],
+        options: {
+          connected?: boolean;
+          connectedClientCount?: number;
+          lastError?: RuntimeIssueInfo;
+        } = {},
+      ): RuntimeBrowserState => {
+        const connectedClientCount =
+          options.connectedClientCount ?? browserRuntimeClients?.size ?? 0;
+        const connected = options.connected ?? status === 'connected';
+
+        return {
+          status,
+          connected,
+          connectedClientCount,
+          lastTransitionAt: new Date().toISOString(),
+          ...(options.lastError ? { lastError: options.lastError } : {}),
+        };
+      };
+
+      const publishBrowserState = (browser: RuntimeBrowserState): void => {
+        void setRuntimeSessionBrowserState(config.root, browser).catch((error) => {
+          console.error('[IWSDK Dev] Failed to update browser state:', error);
+        });
+      };
 
       /**
        * Launch (or re-launch) the Playwright-managed browser.
@@ -438,6 +287,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         }
 
         browserLaunchPromise = (async () => {
+          publishBrowserState(createBrowserState('launching'));
           try {
             const browser = await launchManagedBrowser(
               browserUrl,
@@ -448,11 +298,30 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             );
             managedBrowser = browser;
             consecutiveFailures = 0;
+            publishBrowserState(
+              createBrowserState(
+                (browserRuntimeClients?.size ?? 0) > 0
+                  ? 'connected'
+                  : 'waiting_for_connection',
+                {
+                  connected: (browserRuntimeClients?.size ?? 0) > 0,
+                },
+              ),
+            );
 
             // On unexpected close, mark as null. The browser will be
             // relaunched lazily on the next MCP request via ensureBrowser().
             browser.onClose(() => {
               managedBrowser = null;
+              publishBrowserState(
+                createBrowserState('disconnected', {
+                  connected: false,
+                  lastError: createBrowserIssue(
+                    'connection_lost',
+                    'Managed browser closed unexpectedly. It will relaunch on the next MCP request.',
+                  ),
+                }),
+              );
               if (!serverShuttingDown) {
                 console.log(
                   '🔄 IWSDK: Browser closed. Will relaunch on next MCP request.',
@@ -461,6 +330,16 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
             });
           } catch (error) {
             consecutiveFailures++;
+            const message = error instanceof Error ? error.message : String(error);
+            publishBrowserState(
+              createBrowserState('launch_failed', {
+                connected: false,
+                lastError: createBrowserIssue(
+                  classifyBrowserLaunchFailure(message),
+                  message,
+                ),
+              }),
+            );
             console.error('❌ IWSDK: Failed to launch browser:', error);
             if (consecutiveFailures >= MAX_LAUNCH_FAILURES) {
               console.error(
@@ -499,6 +378,7 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
       // Initialize WebSocket server and client tracking
       mcpClients = new Set();
+      browserRuntimeClients = new Set();
       mcpWss = new WebSocketServer({ noServer: true });
 
       // First-response-wins relay handler (extracted for testability)
@@ -533,6 +413,20 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
           let intercepted = false;
           try {
             const parsed = JSON.parse(message);
+
+            if (parsed?.type === 'iwsdk_browser_hello') {
+              intercepted = true;
+              if (!browserRuntimeClients!.has(ws)) {
+                browserRuntimeClients!.add(ws);
+                publishBrowserState(
+                  createBrowserState('connected', {
+                    connected: true,
+                    connectedClientCount: browserRuntimeClients!.size,
+                  }),
+                );
+              }
+              return;
+            }
 
             const BROWSER_RELAUNCHED_RESULT = {
               status: 'browser_relaunched',
@@ -614,6 +508,24 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
 
         ws.on('close', () => {
           mcpClients!.delete(ws);
+          if (browserRuntimeClients!.delete(ws)) {
+            publishBrowserState(
+              createBrowserState(
+                browserRuntimeClients!.size > 0 ? 'connected' : 'disconnected',
+                {
+                  connected: browserRuntimeClients!.size > 0,
+                  connectedClientCount: browserRuntimeClients!.size,
+                  lastError:
+                    browserRuntimeClients!.size > 0
+                      ? undefined
+                      : createBrowserIssue(
+                          'connection_lost',
+                          'Managed browser runtime disconnected from the MCP bridge.',
+                        ),
+                },
+              ),
+            );
+          }
           if (pluginOptions.verbose) {
             console.log('[IWSDK-MCP] Client disconnected');
           }
@@ -647,19 +559,8 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         );
       }
 
-      // Generate MCP config files for selected AI tools after server starts
-      // We wait for the 'listening' event to get the actual port (in case configured port was busy)
-
-      // Find the path to the MCP server script
-      // It's installed in node_modules/@iwsdk/vite-plugin-dev/dist/mcp-server.js
-      const mcpServerPath = path.join(
-        config.root,
-        'node_modules',
-        '@iwsdk',
-        'vite-plugin-dev',
-        'dist',
-        'mcp-server.js',
-      );
+      // Register the project-local runtime session after server start.
+      // Waiting for 'listening' lets us record Vite's actual chosen port.
 
       // Find the path to the RAG MCP server
       const ragMcpServerPath = path.join(
@@ -669,11 +570,6 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         'iwsdk-rag-mcp',
         'dist',
         'index.js',
-      );
-
-      // Check if hzdb is installed (for MCP config — telemetry uses npx and fails silently)
-      const hzdbInstalled = existsSync(
-        path.join(config.root, 'node_modules', '@meta-quest', 'hzdb'),
       );
 
       // Resolve IWSDK version for telemetry attribution
@@ -696,88 +592,31 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
       const sessionId = randomUUID();
       const sessionStartTime = Date.now();
 
-      const writeMcpConfigs = async (actualPort: number) => {
-        const mcpServerArgs = [mcpServerPath, '--port', String(actualPort)];
-        if (iwsdkVersion) {
-          mcpServerArgs.push('--client-version', iwsdkVersion);
-        }
-
-        // Build the full set of all possible managed entries, then remove
-        // those whose packages aren't installed. The full key list is passed
-        // as managedKeys so mergeJsonConfig can clean up stale entries from
-        // previous runs where a package was present but has since been removed.
-        const serverEntries: Record<
-          string,
-          { command: string; args: string[] } | undefined
-        > = {
-          'iwsdk-dev-mcp': {
-            command: 'node',
-            args: mcpServerArgs,
-          },
-          'iwsdk-rag-local': existsSync(ragMcpServerPath)
-            ? { command: 'node', args: [ragMcpServerPath] }
-            : undefined,
-          hzdb: hzdbInstalled
-            ? { command: 'npx', args: ['@meta-quest/hzdb', 'mcp', 'server'] }
-            : undefined,
-        };
-
-        const managedKeys = Object.keys(serverEntries);
-        const activeEntries: Record<
-          string,
-          { command: string; args: string[] }
-        > = {};
-        for (const [key, value] of Object.entries(serverEntries)) {
-          if (value) {
-            activeEntries[key] = value;
-          }
-        }
-
-        const tools = pluginOptions.ai!.tools;
-        const writes: Promise<unknown>[] = [];
-
-        for (const tool of tools) {
-          const target = MCP_CONFIG_TARGETS[tool];
-          const filePath = path.join(config.root, target.file);
-
-          if (target.format === 'json') {
-            writes.push(
-              mergeJsonConfig(
-                filePath,
-                activeEntries,
-                target.jsonKey!,
-                managedKeys,
-              ),
-            );
-          } else {
-            writes.push(mergeTomlConfig(filePath, activeEntries));
-          }
-        }
-
-        const results = await Promise.allSettled(writes);
-        const failures = results.filter(
-          (r): r is PromiseRejectedResult => r.status === 'rejected',
-        );
-        if (failures.length > 0) {
-          for (const f of failures) {
-            console.error('[MCP] Config write failed:', f.reason);
-          }
-        } else if (pluginOptions.verbose) {
-          const toolNames = tools.join(', ');
-          console.log(
-            `📝 MCP: Generated config files for [${toolNames}] (port: ${actualPort})`,
-          );
-        }
-      };
-
       // Wait for server to start listening to get the actual port
-      server.httpServer?.on('listening', () => {
+      server.httpServer?.on('listening', async () => {
         const address = server.httpServer?.address();
         const actualPort =
           typeof address === 'object' && address
             ? address.port
             : server.config.server.port || 5173;
-        writeMcpConfigs(actualPort);
+
+        const protocol = server.config.server.https ? 'https' : 'http';
+        browserUrl = `${protocol}://localhost:${actualPort}`;
+        try {
+          await registerRuntimeSession({
+            sessionId,
+            workspaceRoot: config.root,
+            pid: process.pid,
+            port: actualPort,
+            localUrl: server.resolvedUrls?.local?.[0] ?? browserUrl,
+            networkUrls: server.resolvedUrls?.network ?? [],
+            aiMode: pluginOptions.ai?.mode,
+            aiTools: pluginOptions.ai?.tools ?? [],
+            browser: createBrowserState('launching', { connected: false }),
+          });
+        } catch (error) {
+          console.error('[IWSDK Dev] Failed to register runtime session:', error);
+        }
 
         // Report session start to hzdb telemetry (fire-and-forget via npx)
         reportSessionStart(sessionId, {
@@ -791,17 +630,13 @@ export function iwsdkDev(options: DevPluginOptions = {}): Plugin {
         warmupRagMcp(ragMcpServerPath, pluginOptions.verbose);
 
         // Launch Playwright-managed browser
-        const protocol = server.config.server.https ? 'https' : 'http';
-        browserUrl = `${protocol}://localhost:${actualPort}`;
         launchBrowser();
       });
 
       // Clean up WebSocket server and browser when Vite server closes.
-      // MCP config files (.mcp.json, .cursor/mcp.json, etc.) are intentionally
-      // left in place — they are harmless when the dev server isn't running and
-      // will be overwritten with fresh values on the next `npm run dev`.
       server.httpServer?.on('close', () => {
         serverShuttingDown = true;
+        void unregisterRuntimeSession(config.root);
 
         reportSessionEnd(sessionId, {
           durationMs: Date.now() - sessionStartTime,

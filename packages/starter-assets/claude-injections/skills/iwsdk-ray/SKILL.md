@@ -51,10 +51,10 @@ scene_get_object_transform(uuid) → use positionRelativeToXROrigin
 
 ### Step 4: Aim the controller
 
-Point the controller at the target. Default to **right controller** unless the user specified left. Do NOT move the controller — only rotate it.
+Point the controller at the target. Default to `"controller-right"` unless the user specified left. Do NOT move the controller — only rotate it.
 
 ```
-xr_look_at(device, target: {x, y, z})
+xr_look_at({ device: "controller-right", target: { x, y, z } })
 ```
 
 The controller ray is now pointing at the target. What happens next depends on the interaction type.
@@ -68,7 +68,7 @@ Based on the user's intent and the target's components, choose ONE of the follow
 For simple clicks — fires selectstart, select, selectend events. Use for UI buttons and objects that respond to Pressed component.
 
 ```
-xr_select(device)
+xr_select({ device: "controller-right" })
 ```
 
 This is a quick press-and-release. Done.
@@ -80,7 +80,10 @@ DistanceGrabbable requires **press and hold** on the trigger (button index 0), n
 #### B1: Engage trigger
 
 ```
-xr_set_gamepad_state(device, buttons: [{index: 0, value: 1}])
+xr_set_gamepad_state({
+  device: "controller-right",
+  buttons: [{ index: 0, value: 1 }],
+})
 ```
 
 The object is now distance-grabbed. Behavior depends on the `movementMode`:
@@ -93,15 +96,22 @@ The object is now distance-grabbed. Behavior depends on the `movementMode`:
 If the user wants to move the object somewhere, animate the controller to the destination.
 
 ```
-xr_animate_to(device, destination_position, duration: 0.5)
+xr_animate_to({
+  device: "controller-right",
+  position: { x, y, z },
+  duration: 0.5,
+})
 ```
 
-If no destination specified but user asked to "move" or "bring" the object, animate to in front of the headset: `xr_get_transform(headset)` → place at `(head.x, head.y - 0.2, head.z - 0.5)`.
+If no destination specified but user asked to "move" or "bring" the object, animate to in front of the headset: `xr_get_transform({ "device": "headset" })` → place at `(head.x, head.y - 0.2, head.z - 0.5)`.
 
 #### B3: Release trigger
 
 ```
-xr_set_gamepad_state(device, buttons: [{index: 0, value: 0}])
+xr_set_gamepad_state({
+  device: "controller-right",
+  buttons: [{ index: 0, value: 0 }],
+})
 ```
 
 #### B4: Return controller
@@ -109,7 +119,11 @@ xr_set_gamepad_state(device, buttons: [{index: 0, value: 0}])
 Animate back to resting position.
 
 ```
-xr_animate_to(device, resting_position, duration: 0.5)
+xr_animate_to({
+  device: "controller-right",
+  position: { x: 0.2, y: 1.4, z: -0.3 },
+  duration: 0.5,
+})
 ```
 
 Default resting positions: right `(0.2, 1.4, -0.3)`, left `(-0.2, 1.4, -0.3)`.

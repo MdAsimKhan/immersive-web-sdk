@@ -304,17 +304,17 @@ WebXR emulator control for testing without a headset.
 - **Discover entities:** `ecs_find_entities` (get entity indices) → `ecs_query_entity` (read component data)
 - **Discover schema:** `ecs_list_components` to see field names/types before querying or setting values
 - **Frame-by-frame debugging:** `ecs_pause` → `ecs_step` (count/delta). Must pause before stepping.
-- **Diff state changes:** `ecs_snapshot(label="before")` → trigger action → `ecs_snapshot(label="after")` → `ecs_diff(from="before", to="after")`
-- **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system` to pause one system while others run
+- **Diff state changes:** `ecs_snapshot({"label":"before"})` → trigger action → `ecs_snapshot({"label":"after"})` → `ecs_diff({"from":"before","to":"after"})`
+- **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system({"name":"SystemName","paused":true})` to pause one system while others run
 - **Look at an object:** `scene_get_hierarchy` → find UUID → `scene_get_object_transform` → use `positionRelativeToXROrigin` with `xr_look_at`
 
 **Connection check — always call first:**
 
-Call `xr_get_session_status` before doing anything else. If this returns a successful connection, the dev server is ALREADY running. Do NOT start another one.
+Call `xr_get_session_status` before doing anything else. In environments with deferred MCP schemas, hydrate the `mcp__iwsdk__*` tools first or use `npx iwsdk xr status` for the same check. If this returns a successful connection, the dev server is ALREADY running. Do NOT start another one.
 
 **Troubleshooting:**
 
-- Dev server not running → Start with `npm run dev`
+- Dev server not running → Start with `npm run dev` (CLI-managed) or `npx iwsdk dev up` for the explicit runtime-first entrypoint
 - Browser tab in background → Bring to foreground (Chrome throttles background tabs)
 - Session not active → Use `xr_accept_session`
 
@@ -589,12 +589,12 @@ npx tsc --noEmit
 
 Type errors will prevent systems from initializing properly, but may not show errors in the browser console. Always type check after writing code and before testing.
 
-**BEFORE starting a dev server, ALWAYS check if one is already running** by calling `xr_get_session_status`. If this returns a successful connection, the dev server is already running. Do NOT start another one.
+**BEFORE starting a dev server, ALWAYS check if one is already running** by calling `xr_get_session_status`. In environments with deferred MCP schemas, hydrate the `mcp__iwsdk__*` tools first or use `npx iwsdk xr status`. If this returns a successful connection, the dev server is already running. Do NOT start another one.
 
 1. **Type check first:** `npx tsc --noEmit` - fix any errors before proceeding
-2. Check IWER status first: `xr_get_session_status`
-3. If not connected, start dev server: `npm run dev`
-4. Open browser to `https://localhost:8081`
+2. Check IWER status first: `xr_get_session_status` (or `npx iwsdk xr status` if MCP schemas are still deferred)
+3. If not connected, start the CLI-managed dev server: `npm run dev`
+4. If you need the resolved runtime URL or port, run `npx iwsdk dev status`
 5. Enter XR: `xr_accept_session`
 6. Test interactions with controller tools
 

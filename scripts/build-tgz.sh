@@ -30,7 +30,7 @@ PACKAGES_DIR="$BASE_DIR/packages"
 EXAMPLES_DIR="$BASE_DIR/examples"
 
 # Package build order (dependencies first)
-LEAF_PACKAGES=("glxf" "xr-input" "locomotor" "vite-plugin-gltf-optimizer" "vite-plugin-dev" "vite-plugin-metaspatial" "vite-plugin-uikitml" "create")
+LEAF_PACKAGES=("glxf" "xr-input" "locomotor" "vite-plugin-gltf-optimizer" "cli" "vite-plugin-dev" "vite-plugin-metaspatial" "vite-plugin-uikitml" "create")
 ROOT_PACKAGES=("core")
 
 # Function to backup package.json
@@ -213,6 +213,7 @@ main() {
     echo ""
     echo "💡 Examples can now install these packages with:"
     echo "   npm install ./iwsdk-core.tgz"
+    echo "   npm install ./iwsdk-cli.tgz --save-dev"
     echo "   npm install ./iwsdk-vite-plugin-gltf-optimizer.tgz --save-dev"
     echo "   npm install ./iwsdk-vite-plugin-dev.tgz --save-dev"
     echo "   npm install ./iwsdk-vite-plugin-metaspatial.tgz --save-dev"

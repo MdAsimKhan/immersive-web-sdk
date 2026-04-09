@@ -127,7 +127,7 @@ The `depthSensing.usage` field controls how depth data is accessed:
 ## Testing on Device
 
 1. Start the dev server: `pnpm dev`
-2. On your Quest device, open the browser and navigate to `https://YOUR_LOCAL_IP:8081`
+2. On your Quest device, open the browser and navigate to the reported network URL, for example `https://YOUR_LOCAL_IP:<PORT>`
 3. Accept the self-signed certificate warning
 4. Enter AR mode
 5. Move the virtual objects behind real-world surfaces to see occlusion

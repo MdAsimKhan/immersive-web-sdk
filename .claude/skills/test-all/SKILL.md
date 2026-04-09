@@ -1,6 +1,6 @@
 ---
 name: test-all
-description: 'Parallel test orchestrator. Runs all 9 test suites concurrently via Task sub-agents and mcp-call.mjs. Handles build, example setup, dev servers, agent launch, polling, retries, and result aggregation.'
+description: 'Parallel test orchestrator. Runs all 9 test suites concurrently via Task sub-agents and the iwsdk CLI. Handles build, example setup, dev servers, agent launch, polling, retries, and result aggregation.'
 argument-hint: '[--skip <test-name>] [--only <test-name>]'
 ---
 
@@ -8,7 +8,7 @@ argument-hint: '[--skip <test-name>] [--only <test-name>]'
 
 Runs all 9 IWSDK test suites simultaneously. The orchestrator handles the full lifecycle: build, example prep, dev servers, sub-agent launch, polling, retries, cleanup, and aggregate reporting.
 
-Each test gets its own example directory and dev server. Sub-agents read the skill files and execute tests via `mcp-call.mjs` WebSocket CLI.
+Each test gets its own example directory and dev server. Sub-agents read the skill files and execute tests through the direct `npx iwsdk` flow described in each skill.
 
 ---
 
@@ -26,7 +26,7 @@ Each test gets its own example directory and dev server. Sub-agents read the ski
 | test-locomotion   | examples/locomotion       | 6      | test-locomotion/SKILL.md   |
 | test-physics      | examples/physics          | 5      | test-physics/SKILL.md      |
 
-Ports are **not** pre-assigned. Each dev server picks its own port dynamically. The orchestrator discovers each port from the server's log output.
+Ports are **not** pre-assigned. Each dev server picks its own port dynamically. The orchestrator can discover each active URL from the server logs or `npx iwsdk dev status`, but the sub-agent skills no longer need the port explicitly.
 
 ---
 
@@ -78,13 +78,13 @@ node scripts/test-prep.mjs install
 
 ## Phase 3: Start 9 Dev Servers
 
-Start all dev servers, wait for them to be ready, and discover their ports. This single command handles everything — starting servers, polling for `.mcp.json` files, and outputting the port map:
+Start all dev servers, wait for them to be ready, and discover their active URLs. This single command handles everything — starting servers, polling for readiness, and outputting the current port map:
 
 ```bash
 node scripts/test-servers.mjs start
 ```
 
-The output is JSON with the port map: `{"poke": 8084, "poke-ecs": 8082, ...}`. Parse this to get each example's port for Phase 4.
+The output is JSON with the current port map: `{"poke": 8084, "poke-ecs": 8082, ...}`. Keep it for diagnostics, but the sub-agents should rely on the direct CLI flow inside each example directory rather than passing ports around.
 
 If any server fails to start within 60 seconds, the script reports which ones are missing and exits with code 1. Check `/tmp/iwsdk-dev-<name>.log` for errors.
 
@@ -102,15 +102,12 @@ For each test, launch a Task sub-agent with `subagent_type: "Bash"`, `mode: "byp
 
 ### Sub-agent prompt template
 
-Each sub-agent gets this prompt (with `<SKILL_FILE>`, `<PORT>`, and `<ROOT>` substituted using the ports discovered from `.mcp.json` in Phase 3):
+Each sub-agent gets this prompt (with `<SKILL_FILE>`, `<EXAMPLE_DIR>`, and `<ROOT>` substituted):
 
 ```
 Read the file at <ROOT>/.claude/skills/<SKILL_FILE> and execute the test instructions
 starting from Step 3 (Verify Connectivity). Steps 1 and 2 have already been completed —
-the dev server is running on port <PORT>.
-
-Use port <PORT> wherever the instructions say <PORT>. The MCPCALL shorthand expands to:
-node <ROOT>/scripts/mcp-call.mjs --port <PORT>
+the dev server for <EXAMPLE_DIR> is already running.
 
 Execute all test suites (Steps 3-4), then do Step 5 (cleanup and results summary).
 Do NOT kill the dev server in cleanup — the parent agent will handle that.
@@ -124,8 +121,8 @@ Save each agent's `task_id` and `output_file` from the tool result. Track them:
 
 ```
 agents = {
-  "test-interactions": { task_id: "...", output_file: "...", port: <from .mcp.json>, status: "running" },
-  "test-ecs-core":     { task_id: "...", output_file: "...", port: <from .mcp.json>, status: "running" },
+  "test-interactions": { task_id: "...", output_file: "...", example_dir: "examples/poke", status: "running" },
+  "test-ecs-core":     { task_id: "...", output_file: "...", example_dir: "examples/poke-ecs", status: "running" },
   ...
 }
 ```
@@ -207,15 +204,15 @@ If any test failed, include the failure details from that agent's output.
 
 ### Orchestrator manages dev servers, sub-agents run tests
 
-Sub-agents (Task tool) cannot run background processes. The orchestrator starts all 9 dev servers, discovers their dynamically-assigned ports from the log output, then launches sub-agents that only execute the test steps. Each sub-agent reads its skill file and starts from Step 3 (Verify Connectivity).
+Sub-agents (Task tool) cannot run background processes. The orchestrator starts all 9 dev servers, records their dynamically-assigned ports for diagnostics, then launches sub-agents that only execute the test steps. Each sub-agent reads its skill file and starts from Step 3 (Verify Connectivity).
 
-### Dynamic port discovery via `.mcp.json`
+### Runtime-first server discovery for diagnostics
 
-Ports are NOT pre-assigned. Each dev server is started with `npm run dev` and Vite picks an available port automatically. The `iwsdkDev` vite plugin writes the actual port into each example's `.mcp.json` file. The orchestrator reads these files to discover ports — this is machine-generated JSON, more robust than parsing log output.
+Ports are NOT pre-assigned. Each dev server is started with `npm run dev` and Vite picks an available port automatically. The orchestrator may still collect the resulting port map for diagnostics, but that data is only for the parent agent's visibility. Sub-agents should treat the running example directory as the source of truth and use the direct `npx iwsdk` flow from inside that directory.
 
 ### Sub-agents read skill files directly
 
-Each sub-agent reads its SKILL.md at runtime. No extraction or text munging needed — the sub-agent is told to skip Steps 1-2 (already done) and start from Step 3. The port is passed explicitly in the prompt.
+Each sub-agent reads its SKILL.md at runtime. No extraction or text munging needed — the sub-agent is told to skip Steps 1-2 (already done) and start from Step 3. Do NOT pass ports in the prompt.
 
 ### TaskOutput vs file-based polling
 
@@ -235,7 +232,7 @@ The sub-agent may have hit its turn limit. Check the end of its output for trunc
 
 ### Port already in use
 
-Run `lsof -i :<PORT>` to find the process. Kill it before relaunching.
+Run `node scripts/test-servers.mjs stop` to clear the managed dev servers before relaunching.
 
 ### fresh:install fails
 

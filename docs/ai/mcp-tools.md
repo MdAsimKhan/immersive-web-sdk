@@ -10,7 +10,7 @@ The IWSDK MCP server exposes 32 tools organized into 9 categories. These tools g
 
 ### `xr_get_session_status`
 
-Get the current XR session and device status.
+Get the current XR session and device status. The response also includes managed-browser readiness metadata so agents can distinguish "runtime up but browser still connecting" from "browser connected".
 
 **Parameters:** None
 
@@ -102,7 +102,7 @@ Set the select (trigger/pinch) value. Use for grab-move-release patterns: set to
 
 | Parameter | Type     | Required | Description                               |
 | --------- | -------- | -------- | ----------------------------------------- |
-| `device`  | `string` | Yes      | Input device                              |
+| `device`  | `string` | Yes      | `controller-left`, `controller-right`, `hand-left`, `hand-right` |
 | `value`   | `number` | Yes      | 0 (released) to 1 (fully pressed/pinched) |
 
 ### `xr_select`
@@ -111,7 +111,7 @@ Perform a complete select action (press and release). Dispatches `selectstart`, 
 
 | Parameter  | Type     | Required | Description                                 |
 | ---------- | -------- | -------- | ------------------------------------------- |
-| `device`   | `string` | Yes      | Input device                                |
+| `device`   | `string` | Yes      | `controller-left`, `controller-right`, `hand-left`, `hand-right` |
 | `duration` | `number` | No       | How long to hold in seconds (default: 0.15) |
 
 ## Gamepad

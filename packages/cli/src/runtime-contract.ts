@@ -5,45 +5,133 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
-import WebSocket from 'ws';
-import { reportToolCall } from './hzdb-telemetry.js';
+export type AiTool = 'claude' | 'cursor' | 'copilot' | 'codex';
 
-// Parse command line arguments
-const args = process.argv.slice(2);
-let port = 5173; // Default Vite port
-let verbose = false;
-let clientVersion: string | null = null;
+export type JsonSchema = {
+  type?: string;
+  description?: string;
+  enum?: string[];
+  oneOf?: JsonSchema[];
+  items?: JsonSchema;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  minimum?: number;
+  maximum?: number;
+};
 
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === '--port' && args[i + 1]) {
-    const parsedPort = parseInt(args[i + 1], 10);
-    if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort <= 65535) {
-      port = parsedPort;
-    } else {
-      console.error(
-        `[IWSDK-MCP] Invalid port: ${args[i + 1]}, using default ${port}`,
-      );
-    }
-    i++;
-  } else if (args[i] === '--client-version' && args[i + 1]) {
-    clientVersion = args[i + 1];
-    i++;
-  } else if (args[i] === '--verbose') {
-    verbose = true;
-  }
+export interface McpConfigTarget {
+  file: string;
+  jsonKey: string | null;
+  format: 'json' | 'toml';
 }
 
-/**
- * MCP Tool definitions for IWER control.
- * These map 1:1 to RemoteControlInterface methods in IWER.
- */
-export const TOOLS = [
+export interface McpToolDefinition {
+  name: string;
+  description: string;
+  inputSchema: JsonSchema;
+}
+
+export interface RuntimeOperationDefinition {
+  id: string;
+  domain: string;
+  action: string;
+  cliPath: [string, string] | string[];
+  mcpName: string;
+  wsMethod: string;
+  description: string;
+  inputSchema: JsonSchema;
+}
+
+export const IWSDK_PROJECT_STATE_DIR = '.iwsdk';
+export const IWSDK_RUNTIME_STATE_DIR = '.iwsdk/runtime';
+export const IWSDK_RUNTIME_LOGS_DIR = '.iwsdk/runtime/logs';
+export const IWSDK_RUNTIME_SESSION_PATH = '.iwsdk/runtime/session.json';
+export const IWSDK_RUNTIME_LAUNCH_PATH = '.iwsdk/runtime/launch.json';
+export const IWSDK_RUNTIME_STATE_SCHEMA_VERSION = 1;
+
+export type RuntimeIssueCause =
+  | 'browser_not_ready'
+  | 'browser_not_launched'
+  | 'browser_launch_failed'
+  | 'connection_lost'
+  | 'permission_denied'
+  | 'browser_relaunched'
+  | 'tab_throttled'
+  | 'open_failed';
+
+export interface RuntimeIssueInfo {
+  cause: RuntimeIssueCause;
+  message: string;
+  at: string;
+}
+
+export type RuntimeBrowserStatus =
+  | 'launching'
+  | 'waiting_for_connection'
+  | 'connected'
+  | 'disconnected'
+  | 'launch_failed';
+
+export interface RuntimeBrowserState {
+  status: RuntimeBrowserStatus;
+  connected: boolean;
+  connectedClientCount: number;
+  lastTransitionAt: string;
+  lastError?: RuntimeIssueInfo;
+}
+
+export interface RuntimeSession {
+  schemaVersion: number;
+  sessionId: string;
+  workspaceRoot: string;
+  pid: number;
+  port: number;
+  localUrl: string;
+  networkUrls: string[];
+  aiMode?: string;
+  aiTools: AiTool[];
+  browser?: RuntimeBrowserState;
+  registeredAt: string;
+  updatedAt: string;
+}
+
+export interface LaunchMetadata {
+  schemaVersion: number;
+  workspaceRoot: string;
+  pid: number;
+  command: string;
+  args: string[];
+  logPath: string | null;
+  scriptName: string;
+  port: number | null;
+  openBrowser: boolean;
+  createdAt: string;
+}
+
+export interface WorkspaceRuntimeState {
+  workspaceRoot: string;
+  running: boolean;
+  starting: boolean;
+  browserConnected: boolean;
+  session: RuntimeSession | null;
+  launch: LaunchMetadata | null;
+}
+
+export const SUPPORTED_AI_TOOLS: AiTool[] = [
+  'claude',
+  'cursor',
+  'copilot',
+  'codex',
+];
+
+export const MCP_CONFIG_TARGETS: Record<AiTool, McpConfigTarget> = {
+  claude: { file: '.mcp.json', jsonKey: 'mcpServers', format: 'json' },
+  cursor: { file: '.cursor/mcp.json', jsonKey: 'mcpServers', format: 'json' },
+  copilot: { file: '.vscode/mcp.json', jsonKey: 'servers', format: 'json' },
+  codex: { file: '.codex/config.toml', jsonKey: null, format: 'toml' },
+};
+
+export const RUNTIME_MCP_TOOLS: McpToolDefinition[] = [
   // =============================================================================
   // Session Management
   // =============================================================================
@@ -138,12 +226,10 @@ export const TOOLS = [
           description:
             'Rotation as quaternion {x,y,z,w} or euler angles {pitch,yaw,roll} in degrees',
           properties: {
-            // Quaternion format
             x: { type: 'number', description: 'Quaternion X component' },
             y: { type: 'number', description: 'Quaternion Y component' },
             z: { type: 'number', description: 'Quaternion Z component' },
             w: { type: 'number', description: 'Quaternion W component' },
-            // Euler format (degrees)
             pitch: {
               type: 'number',
               description: 'Pitch in degrees (X rotation)',
@@ -226,12 +312,10 @@ export const TOOLS = [
           description:
             'Target rotation as quaternion {x,y,z,w} or euler angles {pitch,yaw,roll} in degrees',
           properties: {
-            // Quaternion format
             x: { type: 'number', description: 'Quaternion X component' },
             y: { type: 'number', description: 'Quaternion Y component' },
             z: { type: 'number', description: 'Quaternion Z component' },
             w: { type: 'number', description: 'Quaternion W component' },
-            // Euler format (degrees)
             pitch: {
               type: 'number',
               description: 'Pitch in degrees (X rotation)',
@@ -852,12 +936,7 @@ export const TOOLS = [
   },
 ];
 
-/**
- * Map MCP tool names → browser-side WS method names.
- * The browser (IWER RemoteControlInterface) uses the original unprefixed names.
- * ECS tools pass through unchanged (name === method).
- */
-const TOOL_TO_METHOD: Record<string, string> = {
+export const RUNTIME_TOOL_TO_METHOD: Record<string, string> = {
   xr_get_session_status: 'get_session_status',
   xr_accept_session: 'accept_session',
   xr_end_session: 'end_session',
@@ -881,342 +960,67 @@ const TOOL_TO_METHOD: Record<string, string> = {
   scene_get_object_transform: 'get_object_transform',
 };
 
-/**
- * Tab-change tracker: processes raw browser responses and produces
- * MCP-formatted content blocks with tab-change warnings and _tab metadata.
- * Extracted for testability.
- */
-export interface TabTracker {
-  /** Process a raw browser response into MCP content blocks. */
-  processResponse(rawResponse: {
-    result?: unknown;
-    _tabId?: string;
-    _tabGeneration?: number;
-  }): { content: Array<{ type: string; text: string }> };
-  /** Get the last known tab ID. */
-  getLastTabId(): string | null;
-}
+export const RUNTIME_CLI_PATHS: Record<string, string[]> = {
+  xr_get_session_status: ['xr', 'status'],
+  xr_accept_session: ['xr', 'enter'],
+  xr_end_session: ['xr', 'exit'],
+  xr_get_transform: ['xr', 'get-transform'],
+  xr_set_transform: ['xr', 'set-transform'],
+  xr_look_at: ['xr', 'look-at'],
+  xr_animate_to: ['xr', 'animate-to'],
+  xr_set_input_mode: ['xr', 'set-input-mode'],
+  xr_set_connected: ['xr', 'set-connected'],
+  xr_get_select_value: ['xr', 'get-select-value'],
+  xr_set_select_value: ['xr', 'set-select-value'],
+  xr_select: ['xr', 'select'],
+  xr_get_gamepad_state: ['xr', 'get-gamepad-state'],
+  xr_set_gamepad_state: ['xr', 'set-gamepad-state'],
+  browser_screenshot: ['browser', 'screenshot'],
+  xr_get_device_state: ['xr', 'get-device-state'],
+  xr_set_device_state: ['xr', 'set-device-state'],
+  browser_get_console_logs: ['browser', 'logs'],
+  browser_reload_page: ['browser', 'reload'],
+  scene_get_hierarchy: ['scene', 'hierarchy'],
+  scene_get_object_transform: ['scene', 'transform'],
+  ecs_pause: ['ecs', 'pause'],
+  ecs_resume: ['ecs', 'resume'],
+  ecs_step: ['ecs', 'step'],
+  ecs_query_entity: ['ecs', 'query'],
+  ecs_find_entities: ['ecs', 'find'],
+  ecs_list_systems: ['ecs', 'systems'],
+  ecs_list_components: ['ecs', 'components'],
+  ecs_toggle_system: ['ecs', 'toggle-system'],
+  ecs_set_component: ['ecs', 'set-component'],
+  ecs_snapshot: ['ecs', 'snapshot'],
+  ecs_diff: ['ecs', 'diff'],
+};
 
-export function createTabTracker(): TabTracker {
-  let lastTabId: string | null = null;
-
-  function processResponse(rawResponse: {
-    result?: unknown;
-    _tabId?: string;
-    _tabGeneration?: number;
-  }): { content: Array<{ type: string; text: string }> } {
-    const result = rawResponse?.result ?? rawResponse;
-    const tabId = rawResponse?._tabId;
-    const tabGeneration = rawResponse?._tabGeneration;
-    const previousTabId = lastTabId;
-    const tabChanged =
-      previousTabId !== null && tabId != null && tabId !== previousTabId;
-    if (tabId) {
-      lastTabId = tabId;
-    }
-
-    const content: Array<{ type: string; text: string }> = [];
-    if (tabChanged) {
-      content.push({
-        type: 'text',
-        text: `WARNING: Active browser tab changed (previous: ${previousTabId}, current: ${tabId}). All previously cached state (device positions, scene hierarchy, ECS snapshots) is now invalid. Re-query any state you need before proceeding.`,
-      });
-    }
-    content.push({
-      type: 'text',
-      text: JSON.stringify(
-        {
-          ...(typeof result === 'object' && result !== null
-            ? result
-            : { value: result }),
-          ...(tabId ? { _tab: { id: tabId, generation: tabGeneration } } : {}),
-        },
-        null,
-        2,
-      ),
-    });
-
-    return { content };
-  }
-
-  function getLastTabId(): string | null {
-    return lastTabId;
-  }
-
-  return { processResponse, getLastTabId };
-}
-
-// WebSocket connection to Vite dev server
-let ws: WebSocket | null = null;
-let pendingRequests: Map<
-  string,
-  {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-    timeoutHandle: ReturnType<typeof setTimeout>;
-  }
-> = new Map();
-let requestId = 0;
-let isConnected = false;
-
-function tryConnect(protocol: 'wss' | 'ws'): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const wsUrl = `${protocol}://localhost:${port}/__iwer_mcp`;
-
-    if (verbose) {
-      console.error(`[IWSDK-MCP] Trying ${wsUrl}...`);
-    }
-
-    const socket = new WebSocket(wsUrl, {
-      rejectUnauthorized: false,
-    });
-
-    const timeout = setTimeout(() => {
-      socket.close();
-      reject(new Error(`Connection timeout for ${protocol}`));
-    }, 3000);
-
-    socket.on('open', () => {
-      clearTimeout(timeout);
-      ws = socket;
-      isConnected = true;
-      if (verbose) {
-        console.error(`[IWSDK-MCP] Connected via ${protocol.toUpperCase()}`);
-      }
-
-      socket.on('message', (data: Buffer) => {
-        try {
-          const response = JSON.parse(data.toString());
-          const pending = pendingRequests.get(response.id);
-          if (pending) {
-            clearTimeout(pending.timeoutHandle);
-            pendingRequests.delete(response.id);
-            if (response.error) {
-              pending.reject(new Error(response.error.message));
-            } else {
-              pending.resolve(response);
-            }
-          }
-        } catch (error) {
-          if (verbose) {
-            console.error('[IWSDK-MCP] Failed to parse response:', error);
-          }
-        }
-      });
-
-      socket.on('close', () => {
-        isConnected = false;
-        if (verbose) {
-          console.error('[IWSDK-MCP] Disconnected');
-        }
-        pendingRequests.forEach((pending) => {
-          clearTimeout(pending.timeoutHandle);
-          pending.reject(new Error('WebSocket connection closed'));
-        });
-        pendingRequests.clear();
-      });
-
-      resolve();
-    });
-
-    socket.on('error', (error) => {
-      clearTimeout(timeout);
-      if (verbose) {
-        console.error(
-          `[IWSDK-MCP] ${protocol.toUpperCase()} error:`,
-          error.message,
-        );
-      }
-      reject(error);
-    });
-  });
-}
-
-async function connectWebSocket(): Promise<void> {
-  try {
-    await tryConnect('wss');
-    return;
-  } catch {
-    if (verbose) {
-      console.error('[IWSDK-MCP] WSS failed, trying WS...');
-    }
-  }
-
-  try {
-    await tryConnect('ws');
-    return;
-  } catch {
-    throw new Error(
-      `Failed to connect to Vite dev server on port ${port}. Is it running with MCP enabled?`,
-    );
-  }
-}
-
-async function sendCommand(method: string, params: unknown): Promise<unknown> {
-  if (!ws || !isConnected) {
-    throw new Error('Not connected to Vite dev server');
-  }
-
-  const id = `${++requestId}`;
-
-  return new Promise((resolve, reject) => {
-    const timeoutHandle = setTimeout(() => {
-      if (pendingRequests.has(id)) {
-        pendingRequests.delete(id);
-        reject(new Error(`Request timeout for ${method}`));
-      }
-    }, 30000);
-
-    pendingRequests.set(id, { resolve, reject, timeoutHandle });
-
-    const request = {
-      id,
-      method,
-      params: params || {},
+export const RUNTIME_OPERATIONS: RuntimeOperationDefinition[] =
+  RUNTIME_MCP_TOOLS.map((tool) => {
+    const cliPath = RUNTIME_CLI_PATHS[tool.name];
+    return {
+      id: cliPath ? cliPath.join('.') : tool.name,
+      domain: cliPath?.[0] ?? 'misc',
+      action: cliPath?.[1] ?? tool.name,
+      cliPath: cliPath ?? ['misc', tool.name],
+      mcpName: tool.name,
+      wsMethod: RUNTIME_TOOL_TO_METHOD[tool.name] ?? tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
     };
-
-    if (verbose) {
-      console.error(`[IWSDK-MCP] Sending: ${method}`, params);
-    }
-
-    ws!.send(JSON.stringify(request));
   });
+
+export function getRuntimeOperationByToolName(
+  toolName: string,
+): RuntimeOperationDefinition | undefined {
+  return RUNTIME_OPERATIONS.find((operation) => operation.mcpName === toolName);
 }
 
-async function main() {
-  const tabTracker = createTabTracker();
-
-  const server = new Server(
-    {
-      name: 'iwsdk-dev-mcp',
-      version: '1.0.0',
-    },
-    {
-      capabilities: {
-        tools: {},
-      },
-    },
+export function getRuntimeOperationByCliPath(
+  domain: string,
+  action: string,
+): RuntimeOperationDefinition | undefined {
+  return RUNTIME_OPERATIONS.find(
+    (operation) => operation.domain === domain && operation.action === action,
   );
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools: TOOLS };
-  });
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-    const startTime = Date.now();
-
-    // Ensure WebSocket is connected
-    if (!isConnected) {
-      try {
-        await connectWebSocket();
-      } catch (error) {
-        const errorMsg = error instanceof Error ? error.message : String(error);
-        reportToolCall(
-          name,
-          false,
-          Date.now() - startTime,
-          errorMsg.slice(0, 30),
-          undefined,
-          clientVersion ?? undefined,
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Failed to connect to IWSDK dev server: ${errorMsg}`,
-            },
-          ],
-          isError: true,
-        };
-      }
-    }
-
-    // Forward the tool call — map prefixed MCP tool name to browser-side method name
-    try {
-      const method = TOOL_TO_METHOD[name] ?? name;
-      const rawResponse = (await sendCommand(method, args)) as {
-        result?: unknown;
-        _tabId?: string;
-        _tabGeneration?: number;
-      };
-
-      reportToolCall(
-        name,
-        true,
-        Date.now() - startTime,
-        undefined,
-        undefined,
-        clientVersion ?? undefined,
-      );
-
-      // Special handling for screenshot - return inline image
-      const result = rawResponse?.result ?? rawResponse;
-      if (
-        name === 'browser_screenshot' &&
-        result &&
-        typeof result === 'object' &&
-        'imageData' in result
-      ) {
-        const { imageData, mimeType } = result as {
-          imageData: string;
-          mimeType: string;
-        };
-        return {
-          content: [
-            {
-              type: 'image' as const,
-              data: imageData,
-              mimeType,
-            },
-          ],
-        };
-      }
-
-      // Standard tool response — use tabTracker for tab-change detection + _tab metadata
-      return tabTracker.processResponse(rawResponse);
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      reportToolCall(
-        name,
-        false,
-        Date.now() - startTime,
-        errorMsg.slice(0, 30),
-        undefined,
-        clientVersion ?? undefined,
-      );
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Error: ${errorMsg}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  });
-
-  // Try to connect on startup
-  try {
-    await connectWebSocket();
-  } catch {
-    if (verbose) {
-      console.error(
-        '[IWSDK-MCP] Initial connection failed, will retry on tool use',
-      );
-    }
-  }
-
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-
-  if (verbose) {
-    console.error('[IWSDK-MCP] MCP server started');
-  }
 }
-
-main().catch((error) => {
-  console.error('[IWSDK-MCP] Fatal error:', error);
-  process.exit(1);
-});

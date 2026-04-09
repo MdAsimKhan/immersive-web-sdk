@@ -55,7 +55,7 @@ pnpm build
 pnpm preview
 ```
 
-The development server will start at `https://localhost:8081` with automatic HTTPS certificates.
+The development server will start on the HTTPS local URL reported by Vite or `npx iwsdk dev status` (typically `https://localhost:5173/` when that port is free).
 
 ## 📦 Asset Organization
 
@@ -128,7 +128,7 @@ ipconfig getifaddr en0  # macOS
 hostname -I             # Linux
 
 # Access from VR headset
-https://YOUR_LOCAL_IP:8081
+https://YOUR_LOCAL_IP:<PORT>
 ```
 
 ## 🛠 Customization

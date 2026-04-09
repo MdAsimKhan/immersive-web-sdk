@@ -1,0 +1,144 @@
+/**
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+import { parseArgv } from './argv.js';
+import { createFailure, isCliFailure, isCliRawOutput, writeJson } from './cli-results.js';
+import type { CliCommandResult, CliIo, ResolvedCliIo } from './cli-types.js';
+import { handleAdapterPrune, handleAdapterStatus, handleAdapterSync } from './commands/adapter.js';
+import {
+  handleDevDown,
+  handleDevLogs,
+  handleDevOpen,
+  handleDevRestart,
+  handleDevStatus,
+  handleDevUp,
+} from './commands/dev.js';
+import { handleMcpInspect, handleMcpStdio } from './commands/mcp.js';
+import { handleRuntimeOperation } from './commands/runtime.js';
+import { handleStatus } from './commands/status.js';
+import { buildMcpInspectHelp, buildRuntimeCommandHelp, usageLines } from './help.js';
+import { RuntimeCommandExecutionError } from './runtime-transport.js';
+
+export type { CliIo } from './cli-types.js';
+
+export async function runCli(argv: string[], io: CliIo = {}): Promise<number> {
+  const stdout = io.stdout ?? process.stdout;
+  const stderr = io.stderr ?? process.stderr;
+  const cwd = io.cwd ?? process.cwd();
+  const parsed = parseArgv(argv);
+  const [command, subcommand] = parsed.positionals;
+  const context: ResolvedCliIo = { stdout, stderr, cwd };
+
+  try {
+    let result: CliCommandResult;
+
+    if (!command || command === 'help') {
+      stdout.write(`${usageLines().join('\n')}\n`);
+      return 0;
+    }
+
+    if (parsed.options.help) {
+      if (command === 'mcp' && subcommand === 'inspect') {
+        stdout.write(`${buildMcpInspectHelp().join('\n')}\n`);
+        return 0;
+      }
+
+      if (
+        (command === 'xr' ||
+          command === 'browser' ||
+          command === 'scene' ||
+          command === 'ecs') &&
+        subcommand
+      ) {
+        stdout.write(`${buildRuntimeCommandHelp(command, subcommand).join('\n')}\n`);
+        return 0;
+      }
+
+      stdout.write(`${usageLines().join('\n')}\n`);
+      return 0;
+    }
+
+    switch (command) {
+      case 'status':
+        result = await handleStatus(parsed.options, context);
+        break;
+      case 'dev':
+        if (subcommand === 'up') {
+          result = await handleDevUp(parsed.options, context);
+        } else if (subcommand === 'down') {
+          result = await handleDevDown(parsed.options, context);
+        } else if (subcommand === 'restart') {
+          result = await handleDevRestart(parsed.options, context);
+        } else if (subcommand === 'logs') {
+          result = await handleDevLogs(parsed.options, context);
+        } else if (subcommand === 'open') {
+          result = await handleDevOpen(parsed.options, context);
+        } else if (subcommand === 'status') {
+          result = await handleDevStatus(parsed.options, context);
+        } else {
+          throw new Error('Usage: iwsdk dev up|down|restart|logs|open|status');
+        }
+        break;
+      case 'adapter':
+        if (subcommand === 'sync') {
+          result = await handleAdapterSync(parsed.options, context);
+        } else if (subcommand === 'prune') {
+          result = await handleAdapterPrune(parsed.options, context);
+        } else if (subcommand === 'status') {
+          result = await handleAdapterStatus(parsed.options, context);
+        } else {
+          throw new Error('Usage: iwsdk adapter sync|status|prune');
+        }
+        break;
+      case 'mcp':
+        if (subcommand === 'stdio') {
+          return handleMcpStdio(parsed.options, context).then(() => 0);
+        }
+        if (subcommand === 'inspect') {
+          result = await handleMcpInspect(parsed.options, context);
+          break;
+        }
+        throw new Error('Usage: iwsdk mcp stdio|inspect');
+      case 'xr':
+      case 'browser':
+      case 'scene':
+      case 'ecs':
+        result = await handleRuntimeOperation(
+          command,
+          subcommand,
+          parsed.options,
+          context,
+        );
+        break;
+      default:
+        throw new Error(`Unknown command: ${command}`);
+    }
+
+    if (result) {
+      if (isCliRawOutput(result)) {
+        writeJson(stdout, result.value);
+        return 0;
+      }
+      if (isCliFailure(result)) {
+        writeJson(stderr, result);
+        return 1;
+      }
+      writeJson(stdout, result);
+    }
+    return 0;
+  } catch (error) {
+    const failure =
+      error instanceof RuntimeCommandExecutionError
+        ? createFailure(error.message, 'runtime_command_failed', {
+            cause: error.issueCause,
+            browser: error.browser ?? null,
+          })
+        : createFailure(error instanceof Error ? error.message : String(error));
+    writeJson(stderr, failure);
+    return 1;
+  }
+}

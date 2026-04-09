@@ -89,7 +89,7 @@ pnpm build
 pnpm preview
 ```
 
-The development server will start at `https://localhost:8081` with automatic HTTPS certificates.
+The development server will start on the HTTPS local URL reported by Vite or `npx iwsdk dev status` (typically `https://localhost:5173/` when that port is free).
 
 ## 📦 Asset Organization
 
@@ -234,14 +234,14 @@ hostname -I             # Linux
 
 
 # Access from VR headset
-https://YOUR_LOCAL_IP:8081
+https://YOUR_LOCAL_IP:<PORT>
 ```
 
 ## 🎧 Audio Development Tips
 
 ### Testing Spatial Audio
 
-Use headphones or a good stereo setup for testing on a desktop. Or test on actual VR devices for the full spatial experience by accessing from VR headset: `https://YOUR_LOCAL_IP:8081`
+Use headphones or a good stereo setup for testing on a desktop. Or test on actual VR devices for the full spatial experience by accessing from VR headset with the reported network URL, for example `https://YOUR_LOCAL_IP:<PORT>`.
 
 ### Adding New Audio
 

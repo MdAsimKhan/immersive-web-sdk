@@ -132,6 +132,7 @@ describe('BundleSource', () => {
     schemaVersion: 1,
     sdkVersion: '0.1.0',
     packages: {
+      '@iwsdk/cli': 'packages/cli/iwsdk-cli.tgz',
       '@iwsdk/core': 'packages/core/iwsdk-core.tgz',
       '@iwsdk/starter-assets':
         'packages/starter-assets/iwsdk-starter-assets.tgz',
@@ -242,6 +243,9 @@ describe('BundleSource', () => {
     setupManifestFetch();
     const source = new BundleSource('https://example.com/bundle');
     await source.prepare();
+    expect(source.getPackageInstallSpec('@iwsdk/cli')).toBe(
+      `file:${SDK_PACKAGES_DIR}/cli/iwsdk-cli.tgz`,
+    );
     expect(source.getPackageInstallSpec('@iwsdk/core')).toBe(
       `file:${SDK_PACKAGES_DIR}/core/iwsdk-core.tgz`,
     );

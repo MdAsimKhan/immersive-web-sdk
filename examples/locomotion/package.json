@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "iwsdk dev up --open --foreground",
+    "dev:runtime": "vite",
+    "dev:down": "iwsdk dev down",
+    "dev:status": "iwsdk dev status",
     "build": "vite build",
     "preview": "vite preview",
     "fresh:install": "npx rimraf package-lock.json node_modules && npm install",
@@ -19,6 +22,7 @@
     "three": "npm:super-three@0.181.0"
   },
   "devDependencies": {
+    "@iwsdk/cli": "file:../../packages/cli/iwsdk-cli.tgz",
     "@iwsdk/vite-plugin-gltf-optimizer": "file:../../packages/vite-plugin-gltf-optimizer/iwsdk-vite-plugin-gltf-optimizer.tgz",
     "@iwsdk/vite-plugin-dev": "file:../../packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz",
     "@iwsdk/vite-plugin-uikitml": "file:../../packages/vite-plugin-uikitml/iwsdk-vite-plugin-uikitml.tgz",

@@ -41,7 +41,9 @@ export interface AiOptions {
   mode?: AiMode;
 
   /**
-   * Which AI tools to generate MCP config files for.
+   * Which AI tools this workspace targets.
+   * The dev server publishes this in project-local runtime session metadata.
+   * The CLI uses the same tool set when it syncs canonical MCP adapter configs.
    * @default ['claude']
    */
   tools?: AiTool[];
@@ -113,7 +115,8 @@ export interface DevPluginOptions {
   /**
    * AI agent tooling configuration.
    * Enables AI agent control of the emulated XR runtime via MCP + WebSocket.
-   * Omit to disable AI features entirely (no Playwright, no MCP configs).
+   * Omit to disable AI features entirely (no Playwright, no MCP bridge, no
+   * runtime session publication).
    */
   ai?: AiOptions;
 

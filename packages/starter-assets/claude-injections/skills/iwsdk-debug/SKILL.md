@@ -16,12 +16,12 @@ Every debugging session follows this pattern:
 
 1. **Set up** the scenario (position objects, aim controllers, etc.)
 2. **`ecs_pause`** — freeze ECS updates right before the interesting moment
-3. **`ecs_snapshot(label: "before")`** — capture state before the action
+3. **`ecs_snapshot({ "label": "before" })`** — capture state before the action
 4. **Trigger** the action (release grip, apply force, start animation, etc.)
 5. **`ecs_step(count, delta)`** — advance a few frames at fixed timestep
 6. **`browser_screenshot`** — visually verify what happened
-7. **`ecs_snapshot(label: "after")`** — capture state after stepping
-8. **`ecs_diff(from: "before", to: "after")`** — see exactly what changed
+7. **`ecs_snapshot({ "label": "after" })`** — capture state after stepping
+8. **`ecs_diff({ "from": "before", "to": "after" })`** — see exactly what changed
 9. **Repeat** steps 5-8, stepping further until the behavior completes
 10. **`ecs_resume`** — return to normal execution when done
 
@@ -32,11 +32,11 @@ The key insight: **pause BEFORE triggering the action**, not after. If you pause
 | Tool                              | Purpose                                                                             |
 | --------------------------------- | ----------------------------------------------------------------------------------- |
 | `ecs_pause`                       | Freeze all ECS system updates. Render loop continues — screenshots still work.      |
-| `ecs_step(count, delta)`          | Advance N frames with fixed timestep (seconds). Must pause first.                   |
+| `ecs_step({"count":N,"delta":SECONDS})` | Advance N frames with fixed timestep (seconds). Must pause first.            |
 | `ecs_resume`                      | Resume normal execution. First frame uses capped delta to avoid physics explosions. |
-| `ecs_snapshot(label)`             | Capture full ECS state. Stores up to 2 snapshots.                                   |
-| `ecs_diff(from, to)`              | Compare two snapshots. Shows added/removed entities and field-level value changes.  |
-| `ecs_toggle_system(name, paused)` | Pause/resume a single system. Use `ecs_list_systems` to discover names.             |
+| `ecs_snapshot({"label":"..."})`   | Capture full ECS state. Stores up to 2 snapshots.                                   |
+| `ecs_diff({"from":"...","to":"..."})` | Compare two snapshots. Shows added/removed entities and field-level value changes. |
+| `ecs_toggle_system({"name":"...","paused":true})` | Pause/resume a single system. Use `ecs_list_systems` to discover names. |
 | `browser_screenshot`              | Visual verification — works while paused since the render loop continues.           |
 
 ## Stepping Guidelines
@@ -83,7 +83,7 @@ Short domain-specific tips. Apply the core workflow above, plus these hints.
 ### System Isolation
 
 - Use `ecs_list_systems` to see all systems and their priorities.
-- Use `ecs_toggle_system(name, paused: true)` to pause a suspect system while others run.
+- Use `ecs_toggle_system({ "name": "SystemName", "paused": true })` to pause a suspect system while others run.
 - Step forward and observe — if the bug disappears, that system is the cause.
 - Remember to unpause the system when done.
 

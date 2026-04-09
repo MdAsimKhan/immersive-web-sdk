@@ -17,12 +17,12 @@ Before finishing, please go through this checklist:
 
 ## 1. Runtime Verification
 Did you verify your changes work at runtime? If you modified any packages or examples,
-use the mcp-call.mjs script to test against a running dev server:
+use the direct `iwsdk` CLI against a running dev server:
 
-  node scripts/mcp-call.mjs --port <PORT> --tool browser_screenshot
-  node scripts/mcp-call.mjs --port <PORT> --tool get_console_logs
-  node scripts/mcp-call.mjs --port <PORT> --tool ecs_list_systems
-  node scripts/mcp-call.mjs --port <PORT> --tool ecs_list_components
+  npx iwsdk browser screenshot
+  npx iwsdk browser logs
+  npx iwsdk ecs systems
+  npx iwsdk ecs components
 
 If a dev server is running, take a screenshot and check console logs at minimum.
 If no dev server is running and your changes are code-only (not runtime), that's OK — just confirm.
@@ -34,7 +34,7 @@ Run these and fix any issues:
   - `pnpm build` (TypeScript compilation / type checking)
 
 ## 3. MCP Tool Feedback
-If during this session you used the mcp-call.mjs script (or wished you could) and have
+If during this session you used the direct `iwsdk` CLI / MCP tools (or wished you could) and have
 any feedback about the MCP tools — missing tools, confusing APIs, tools that didn't work
 as expected, or tools you wish existed — please append your feedback to:
 

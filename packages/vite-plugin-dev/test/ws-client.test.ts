@@ -83,6 +83,16 @@ function createMockDevice() {
 // Helper to flush all pending promises
 const flushPromises = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+function getParsedSentMessages(instance: MockWebSocket): Record<string, unknown>[] {
+  return instance.getSentMessages().map((message) => JSON.parse(message));
+}
+
+function getRuntimeResponses(instance: MockWebSocket): Record<string, unknown>[] {
+  return getParsedSentMessages(instance).filter(
+    (message) => message.type !== 'iwsdk_browser_hello',
+  );
+}
+
 describe('MCPWebSocketClient', () => {
   let client: MCPWebSocketClient | null = null;
   let mockDevice: ReturnType<typeof createMockDevice>;
@@ -207,6 +217,23 @@ describe('MCPWebSocketClient', () => {
       client.connect();
 
       expect(mockWebSocketInstance).toBe(firstInstance);
+    });
+
+    test('sends a browser hello message after opening', async () => {
+      client = new MCPWebSocketClient(mockDevice as any);
+      client.connect();
+
+      await vi.waitFor(() => mockWebSocketInstance !== null);
+      await vi.waitFor(() => {
+        expect(mockWebSocketInstance!.readyState).toBe(MockWebSocket.OPEN);
+      });
+
+      const messages = getParsedSentMessages(mockWebSocketInstance!);
+      expect(messages[0]).toMatchObject({
+        type: 'iwsdk_browser_hello',
+        tabId: client.tabId,
+        tabGeneration: client.tabGeneration,
+      });
     });
   });
 
@@ -438,13 +465,10 @@ describe('MCPWebSocketClient', () => {
 
       // Wait for async message handling to complete and response to be sent
       await vi.waitFor(() => {
-        expect(mockWebSocketInstance!.getSentMessages().length).toBeGreaterThan(
-          0,
-        );
+        expect(getRuntimeResponses(mockWebSocketInstance!).length).toBeGreaterThan(0);
       });
 
-      const sentMessages = mockWebSocketInstance!.getSentMessages();
-      const response = JSON.parse(sentMessages[0]);
+      const response = getRuntimeResponses(mockWebSocketInstance!)[0];
       expect(response.id).toBe('3');
       expect(response.result).toBeDefined();
     });
@@ -468,13 +492,10 @@ describe('MCPWebSocketClient', () => {
 
       // Wait for async message handling to complete and response to be sent
       await vi.waitFor(() => {
-        expect(mockWebSocketInstance!.getSentMessages().length).toBeGreaterThan(
-          0,
-        );
+        expect(getRuntimeResponses(mockWebSocketInstance!).length).toBeGreaterThan(0);
       });
 
-      const sentMessages = mockWebSocketInstance!.getSentMessages();
-      const response = JSON.parse(sentMessages[0]);
+      const response = getRuntimeResponses(mockWebSocketInstance!)[0];
       expect(response.id).toBe('4');
       expect(response.error).toBeDefined();
       expect(response.error.message).toBe('Test error');
@@ -497,7 +518,7 @@ describe('MCPWebSocketClient', () => {
       }
 
       // Should not crash, no response sent
-      expect(mockWebSocketInstance!.getSentMessages()).toHaveLength(0);
+      expect(getRuntimeResponses(mockWebSocketInstance!)).toHaveLength(0);
     });
 
     test('should ignore malformed requests without id or method', async () => {
@@ -517,7 +538,7 @@ describe('MCPWebSocketClient', () => {
       }
 
       await flushPromises();
-      expect(mockWebSocketInstance!.getSentMessages()).toHaveLength(0);
+      expect(getRuntimeResponses(mockWebSocketInstance!)).toHaveLength(0);
       expect(mockDevice.remote.dispatch).not.toHaveBeenCalled();
     });
   });
@@ -678,12 +699,10 @@ describe('MCPWebSocketClient', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockWebSocketInstance!.getSentMessages().length).toBeGreaterThan(
-          0,
-        );
+        expect(getRuntimeResponses(mockWebSocketInstance!).length).toBeGreaterThan(0);
       });
 
-      const response = JSON.parse(mockWebSocketInstance!.getSentMessages()[0]);
+      const response = getRuntimeResponses(mockWebSocketInstance!)[0];
       expect(response._tabId).toBe(client.tabId);
       expect(response._tabGeneration).toBe(client.tabGeneration);
     });
@@ -706,12 +725,10 @@ describe('MCPWebSocketClient', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockWebSocketInstance!.getSentMessages().length).toBeGreaterThan(
-          0,
-        );
+        expect(getRuntimeResponses(mockWebSocketInstance!).length).toBeGreaterThan(0);
       });
 
-      const response = JSON.parse(mockWebSocketInstance!.getSentMessages()[0]);
+      const response = getRuntimeResponses(mockWebSocketInstance!)[0];
       expect(response._tabId).toBe(client.tabId);
       expect(response._tabGeneration).toBe(client.tabGeneration);
       expect(response.error).toBeDefined();
@@ -736,12 +753,10 @@ describe('MCPWebSocketClient', () => {
       });
 
       await vi.waitFor(() => {
-        expect(mockWebSocketInstance!.getSentMessages().length).toBeGreaterThan(
-          0,
-        );
+        expect(getRuntimeResponses(mockWebSocketInstance!).length).toBeGreaterThan(0);
       });
 
-      const response = JSON.parse(mockWebSocketInstance!.getSentMessages()[0]);
+      const response = getRuntimeResponses(mockWebSocketInstance!)[0];
       expect(response.id).toBe('enrich-2');
       expect(response.result).toEqual(originalResult);
       // Enrichment fields co-exist
@@ -777,9 +792,9 @@ describe('MCPWebSocketClient', () => {
       await vi.advanceTimersByTimeAsync(0);
 
       // Response should have been sent already
-      const sent = mockWebSocketInstance!.getSentMessages();
+      const sent = getRuntimeResponses(mockWebSocketInstance!);
       expect(sent.length).toBe(1);
-      const response = JSON.parse(sent[0]);
+      const response = sent[0];
       expect(response.id).toBe('reload-test');
       expect(response.result).toEqual({
         success: true,

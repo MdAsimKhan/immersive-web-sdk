@@ -64,6 +64,7 @@ describe('installDependenciesFromBundle', () => {
       vite: '^5.0.0',
     },
     devDependencies: {
+      '@iwsdk/cli': '^0.1.0',
       '@iwsdk/vite-plugin-dev': '^0.1.0',
       '@iwsdk/vite-plugin-uikitml': '^0.1.0',
       vitest: '^2.0.0',
@@ -90,6 +91,7 @@ describe('installDependenciesFromBundle', () => {
       '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
       '@iwsdk/starter-assets':
         'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
+      '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
       '@iwsdk/vite-plugin-uikitml':
@@ -105,6 +107,9 @@ describe('installDependenciesFromBundle', () => {
     expect(pkg.dependencies['@iwsdk/starter-assets']).toBe(
       'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
     );
+    expect(pkg.devDependencies['@iwsdk/cli']).toBe(
+      'file:.sdk-packages/cli/iwsdk-cli.tgz',
+    );
     expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe(
       'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
     );
@@ -118,6 +123,7 @@ describe('installDependenciesFromBundle', () => {
       '@iwsdk/core': 'file:.sdk-packages/core/iwsdk-core.tgz',
       '@iwsdk/starter-assets':
         'file:.sdk-packages/starter-assets/iwsdk-starter-assets.tgz',
+      '@iwsdk/cli': 'file:.sdk-packages/cli/iwsdk-cli.tgz',
       '@iwsdk/vite-plugin-dev':
         'file:.sdk-packages/vite-plugin-dev/iwsdk-vite-plugin-dev.tgz',
       '@iwsdk/vite-plugin-uikitml':
@@ -180,6 +186,7 @@ describe('installDependenciesFromBundle', () => {
     // starter-assets should remain unchanged since source doesn't know it
     expect(pkg.dependencies['@iwsdk/starter-assets']).toBe('^0.1.0');
     // devDeps should also remain unchanged
+    expect(pkg.devDependencies['@iwsdk/cli']).toBe('^0.1.0');
     expect(pkg.devDependencies['@iwsdk/vite-plugin-dev']).toBe('^0.1.0');
   });
 });

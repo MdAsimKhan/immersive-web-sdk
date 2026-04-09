@@ -1,0 +1,63 @@
+{
+  "name": "@iwsdk/cli",
+  "version": "0.3.1",
+  "description": "Runtime-first CLI for IWSDK dev servers, adapters, and MCP access",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "iwsdk": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contract": {
+      "types": "./dist/runtime-contract.d.ts",
+      "import": "./dist/contract.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "contract": ["dist/runtime-contract.d.ts"]
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json --emitDeclarationOnly && rollup -c",
+    "clean": "rm -rf dist",
+    "test": "pnpm build && vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "iwsdk",
+    "cli",
+    "mcp",
+    "runtime",
+    "webxr"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/facebook/immersive-web-sdk.git"
+  },
+  "author": "Felix Zhang <fe1ix@meta.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/facebook/immersive-web-sdk/issues"
+  },
+  "homepage": "https://github.com/facebook/immersive-web-sdk#readme",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@types/ws": "^8.5.13",
+    "vitest": "^4.0.0",
+    "ws": "^8.18.0"
+  }
+}

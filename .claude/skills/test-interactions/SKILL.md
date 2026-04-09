@@ -1,6 +1,6 @@
 ---
 name: test-interactions
-description: 'Test XR interactions (ray, poke/touch, dual-mode, audio, UI panel) against the poke example using mcp-call.mjs WebSocket CLI.'
+description: 'Test XR interactions (ray, poke/touch, dual-mode, audio, UI panel) against the poke example using the iwsdk CLI.'
 argument-hint: '[--suite ray|poke|dual|audio|ui|all]'
 ---
 
@@ -8,20 +8,63 @@ argument-hint: '[--suite ray|poke|dual|audio|ui|all]'
 
 Test 12 suites covering XR interaction behaviors: entity discovery, ECS registration, ray interaction, poke/touch, dual-mode, cross-entity isolation, input mode switching, rapid poke cycles, audio, UI panel, and stability.
 
-All tool calls go through `scripts/mcp-call.mjs` via WebSocket — no MCP server, no permission prompts.
+All tool calls go through `npx iwsdk` from the example workspace. The helper below keeps the existing MCP-style tool names, but it resolves them through `iwsdk mcp inspect` and then executes the matching CLI command directly.
 
 **Configuration:**
 
 - EXAMPLE_DIR: /Users/felixz/Projects/immersive-web-sdk/examples/poke
 - ROOT: /Users/felixz/Projects/immersive-web-sdk
 
-**SHORTHAND**: Throughout this document, `MCPCALL` means:
+**SHORTHAND**: Throughout this document, `MCPCALL` means this shell function:
 
-```
-node /Users/felixz/Projects/immersive-web-sdk/scripts/mcp-call.mjs --port <PORT>
-```
+```bash
+MCPCALL() {
+  local tool=""
+  local args=""
+  local timeout=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --tool) tool="$2"; shift 2 ;;
+      --args) args="$2"; shift 2 ;;
+      --timeout) timeout="$2"; shift 2 ;;
+      *) echo "Unknown argument: $1" >&2; return 1 ;;
+    esac
+  done
 
-where `<PORT>` is the port number discovered in Step 2.
+  node --input-type=module - "$tool" "${args:-}" "${timeout:-}" <<'EOF'
+import { spawnSync } from 'node:child_process';
+
+const [toolName, rawArgs, timeout] = process.argv.slice(2);
+const inspect = spawnSync('npx', ['iwsdk', 'mcp', 'inspect'], {
+  cwd: process.cwd(),
+  encoding: 'utf8',
+});
+if (inspect.status !== 0) {
+  if (inspect.stderr) process.stderr.write(inspect.stderr);
+  process.exit(inspect.status ?? 1);
+}
+
+const parsed = JSON.parse(inspect.stdout);
+const tool = parsed.data.tools.find((entry) => entry.mcpName === toolName);
+if (!tool) {
+  console.error(`Unknown tool: ${toolName}`);
+  process.exit(1);
+}
+
+const cliArgs = ['iwsdk', ...tool.cliPath.split(' ')];
+if (rawArgs) cliArgs.push('--input-json', rawArgs);
+if (timeout) cliArgs.push('--timeout', timeout);
+
+const result = spawnSync('npx', cliArgs, {
+  cwd: process.cwd(),
+  encoding: 'utf8',
+});
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
+process.exit(result.status ?? 1);
+EOF
+}
+```
 
 **Tool calling pattern**: Every tool call is a Bash command using the MCPCALL shorthand:
 
@@ -29,13 +72,13 @@ where `<PORT>` is the port number discovered in Step 2.
 MCPCALL --tool <TOOL_NAME> --args '<JSON_ARGS>' 2>/dev/null
 ```
 
-- `<TOOL_NAME>` uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`, `xr_look_at`). The script handles translation internally.
+- `<TOOL_NAME>` uses MCP-style names (e.g. `browser_reload_page`, `xr_accept_session`, `xr_look_at`). The shell helper resolves them to direct CLI commands.
 - `<JSON_ARGS>` is a JSON object string. Omit `--args` if no arguments needed.
 - Output is JSON on stdout. Parse it to check assertions.
 - Use `--timeout 20000` for operations that may take longer (reload, accept_session, animate_to, screenshot).
-- Always append `2>/dev/null` to suppress TLS warnings.
+- Running from the example workspace (or a child directory within it) is required so `npx iwsdk` can resolve the nearest IWSDK app root.
 
-**IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple mcp-call commands together.
+**IMPORTANT**: Run each Bash command one at a time. Parse the JSON output and verify assertions before moving to the next command. Do NOT chain multiple `MCPCALL` commands together.
 
 **IMPORTANT**: When the instructions say "wait N seconds", use `sleep N` as a separate Bash command.
 
@@ -61,7 +104,7 @@ cd /Users/felixz/Projects/immersive-web-sdk/examples/poke && npm run dev
 
 **IMPORTANT**: This command MUST be run with `run_in_background: true` on the Bash tool — do NOT append `&` to the command itself.
 
-Once the background task is launched, poll the output for Vite's ready message (up to 60s). Read the task output or use `tail` to watch for a line containing `Local:`. The output will contain a URL like `https://localhost:5173/`. Extract the port number from this URL and save it as `<PORT>`. All subsequent `MCPCALL` commands use this port.
+Once the background task is launched, poll the output for Vite's ready message (up to 60s). You can also run `npx iwsdk dev status` from the example directory until `state.running` becomes `true`. You do not need to extract or manage the port yourself; all subsequent `MCPCALL` commands resolve the active runtime through the CLI.
 
 If the server fails to start within 60 seconds, report FAIL for all suites and skip to Step 5.
 
@@ -555,7 +598,7 @@ Assert: No error-level logs. Warnings about `AudioContext` autoplay policy are a
 Kill the dev server:
 
 ```bash
-kill $(lsof -t -i :<PORT>) 2>/dev/null
+cd /Users/felixz/Projects/immersive-web-sdk/examples/poke && npx iwsdk dev down
 ```
 
 Output a summary table:
@@ -585,8 +628,8 @@ If any suite fails, include which assertion failed and actual vs expected values
 
 If at any point a transient error occurs (server crash, WebSocket timeout, connection refused, etc.) that is NOT caused by a source code bug:
 
-1. Kill the dev server: `kill $(lsof -t -i :<PORT>) 2>/dev/null`
-2. Restart: re-run Step 2 to start a fresh dev server (port may change)
+1. Stop the dev server: `cd /Users/felixz/Projects/immersive-web-sdk/examples/poke && npx iwsdk dev down`
+2. Restart: re-run Step 2 to start a fresh dev server
 3. Re-run the Pre-test Setup (reload, accept session)
 4. Retry the failed suite
 

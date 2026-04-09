@@ -8,11 +8,11 @@ IWSDK is built from the ground up for AI-assisted immersive web development. AI 
 
 ## How It Works
 
-When you enable AI in your Vite config, the plugin sets up three things automatically:
+When you enable AI in your Vite config and start the app through the `iwsdk` CLI, the stack sets up three things automatically:
 
 1. **[Playwright](https://playwright.dev/) Browser** — A managed Chromium instance that loads your app and provides screenshots and console capture for the AI agent.
-2. **MCP Server** — A local server that exposes 32 tools for controlling the emulated XR runtime, inspecting the scene, and debugging ECS state.
-3. **MCP Config Files** — Auto-generated config files (e.g., `.mcp.json` for Claude) so your AI tool discovers the server on startup.
+2. **Runtime-Resolved MCP Server** — `iwsdk mcp stdio` exposes 32 tools for controlling the emulated XR runtime, inspecting the scene, and debugging ECS state by resolving the active workspace runtime created by `iwsdk dev up`.
+3. **MCP Config Files** — `iwsdk adapter sync` writes workspace-based config files (for example `.mcp.json` for Claude) so your AI tool discovers that server on startup.
 
 ```text
 ┌──────────────────────┐
@@ -21,7 +21,7 @@ When you enable AI in your Vite config, the plugin sets up three things automati
 └──────────┬───────────┘
            │ MCP protocol (stdio)
 ┌──────────▼───────────┐
-│  MCP Server          │◄── screenshots, console logs
+│  iwsdk mcp stdio     │◄── screenshots, console logs
 └──────────┬───────────┘
            │ WebSocket
 ┌──────────▼───────────┐     ┌──────────────────────┐
@@ -35,13 +35,13 @@ When you enable AI in your Vite config, the plugin sets up three things automati
 └──────────────────────┘
 ```
 
-The AI agent communicates with the MCP server over stdio. The server relays commands to the Playwright browser via WebSocket, where the IWER runtime processes them (move controllers, trigger inputs, query state). Screenshots and console logs are captured server-side through Playwright's CDP integration — no browser round-trip needed.
+The AI agent communicates with `iwsdk mcp stdio` over stdio. `iwsdk dev up` records the active workspace runtime, and `iwsdk mcp stdio` resolves that runtime before relaying commands to the Playwright browser via WebSocket, where the IWER runtime processes them (move controllers, trigger inputs, query state). Screenshots and console logs are captured server-side through Playwright's CDP integration — no browser round-trip needed.
 
 Your normal browser runs independently with its own XR session, so you can develop and test manually while the agent works in the background.
 
 ### Additional MCP Servers
 
-The plugin can auto-register additional MCP servers alongside `iwsdk-dev-mcp`:
+The runtime-first adapter sync can also register optional MCP servers alongside `iwsdk`:
 
 - **`iwsdk-rag-local`** — If `@felixtz/iwsdk-rag-mcp` is installed, a local RAG server is registered that provides semantic code search and IWSDK API knowledge. The embedding model is downloaded and cached on first startup.
 - **`hzdb`** — If `@meta-quest/hzdb` is installed, the hzdb MCP server is registered. This provides Meta Quest device management, 3D asset search from Meta's asset library, and IWSDK documentation lookup.
@@ -64,7 +64,7 @@ See [Modes](./modes) for the full deep dive.
 
 ## What Can the Agent Do?
 
-The MCP server exposes tools across several categories:
+The `iwsdk` MCP server exposes tools across several categories:
 
 - **Session** — Accept, monitor, and end XR sessions
 - **Transforms** — Position and orient the headset, controllers, and hands

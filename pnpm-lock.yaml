@@ -20,6 +20,9 @@ importers:
       '@changesets/cli':
         specifier: ^2.29.7
         version: 2.29.7(@types/node@20.19.25)
+      '@iwsdk/cli':
+        specifier: workspace:*
+        version: link:packages/cli
       '@rollup/plugin-commonjs':
         specifier: ^25.0.7
         version: 25.0.8(rollup@4.53.3)
@@ -101,6 +104,21 @@ importers:
       vitepress:
         specifier: ^2.0.0-alpha.16
         version: 2.0.0-alpha.16(@types/node@20.19.25)(axios@1.13.4)(postcss@8.5.6)(terser@5.44.1)(typescript@5.9.3)(yaml@2.8.1)
+
+  packages/cli:
+    devDependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.0.0
+        version: 1.27.1(zod@4.3.6)
+      '@types/ws':
+        specifier: ^8.5.13
+        version: 8.18.1
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.18(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)
+      ws:
+        specifier: ^8.18.0
+        version: 8.19.0
 
   packages/core:
     dependencies:
@@ -226,9 +244,6 @@ importers:
       '@iwer/sem':
         specifier: ^0.2.5
         version: 0.2.5(iwer@2.2.0)
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.0.0
-        version: 1.27.1(zod@4.3.6)
       iwer:
         specifier: ^2.2.0
         version: 2.2.0
@@ -245,6 +260,9 @@ importers:
         specifier: ^8.18.0
         version: 8.19.0
     devDependencies:
+      '@iwsdk/cli':
+        specifier: workspace:*
+        version: link:../cli
       '@types/ws':
         specifier: ^8.5.13
         version: 8.18.1
@@ -374,46 +392,6 @@ importers:
       three:
         specifier: npm:super-three@0.181.0
         version: super-three@0.181.0
-
-  playground:
-    dependencies:
-      '@iwsdk/core':
-        specifier: workspace:*
-        version: link:../packages/core
-      '@pmndrs/uikit-horizon':
-        specifier: ^1.0.60
-        version: 1.0.63(super-three@0.181.0)
-      '@pmndrs/uikit-lucide':
-        specifier: ^1.0.60
-        version: 1.0.63(super-three@0.181.0)
-      three:
-        specifier: npm:super-three@0.181.0
-        version: super-three@0.181.0
-    devDependencies:
-      '@iwsdk/vite-plugin-dev':
-        specifier: workspace:*
-        version: link:../packages/vite-plugin-dev
-      '@iwsdk/vite-plugin-gltf-optimizer':
-        specifier: workspace:*
-        version: link:../packages/vite-plugin-gltf-optimizer
-      '@iwsdk/vite-plugin-uikitml':
-        specifier: workspace:*
-        version: link:../packages/vite-plugin-uikitml
-      '@types/three':
-        specifier: 0.181.0
-        version: 0.181.0
-      playwright:
-        specifier: ^1.58.2
-        version: 1.58.2
-      typescript:
-        specifier: ^5.5.0
-        version: 5.9.3
-      vite:
-        specifier: 7.3.1
-        version: 7.3.1(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)
-      vite-plugin-mkcert:
-        specifier: ^1.17.0
-        version: 1.17.10(vite@7.3.1(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1))
 
 packages:
 
@@ -1154,12 +1132,6 @@ packages:
 
   '@pmndrs/pointer-events@6.6.28':
     resolution: {integrity: sha512-kmZlcMsPiTHcotECLFbo6J/qQouX2ZeKNSMRwBWAF/EFesAV1uPwjar6SQDWkDH0fVB1snNbEoWLDLQ84tWOkw==}
-
-  '@pmndrs/uikit-horizon@1.0.63':
-    resolution: {integrity: sha512-Szpe4E9LacQLf1Vq+ES/+4q6KHu1ZRJAglGbglGjyafidupFh4NoaqEOfHaDfDQpGLmgA0rRgoO4+rwRxRoq1Q==}
-
-  '@pmndrs/uikit-lucide@1.0.63':
-    resolution: {integrity: sha512-WBfQ2us3fzMJviRwGxCpDzrxSwaQDJutbSBvoE7DKoBbj15+wIgWsj7U3aQTmsioGI/AophIy+9qb/u4qxG6YA==}
 
   '@pmndrs/uikit-pub-sub@1.0.62':
     resolution: {integrity: sha512-E/8z5ZnqGfHgsgyUtMujJwRM11JSsZpxYnSxDDOZ+Q5FcK7aLSBCfT80Nm32EdytpN+xQ76mDI8ROvWYg3abxg==}
@@ -4125,12 +4097,6 @@ packages:
   vfile@6.0.3:
     resolution: {integrity: sha512-KzIbH/9tXat2u30jf+smMwFCsno4wHVdNmzFyL+T/L3UGqqk6JKfVqOFOZEpZSHADH1k40ab6NUIXZq422ov3Q==}
 
-  vite-plugin-mkcert@1.17.10:
-    resolution: {integrity: sha512-703hecAoGZYgNrkY76OIbo0M9j0tfGIIM6n7c0sYvhaczQMPwD0nFi+bS44d8kwdbCtV7885FYBWnTzhsaC7QQ==}
-    engines: {node: '>=v16.7.0'}
-    peerDependencies:
-      vite: 7.3.1
-
   vite@7.3.1:
     resolution: {integrity: sha512-w+N7Hifpc3gRjZ63vYBXA56dvvRlNWRczTdmCBBa+CotUzAPf5b7YMdMR/8CQoeYE5LX3W4wj6RYTgonm1b9DA==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -5126,19 +5092,6 @@ snapshots:
 
   '@pmndrs/pointer-events@6.6.28': {}
 
-  '@pmndrs/uikit-horizon@1.0.63(super-three@0.181.0)':
-    dependencies:
-      '@pmndrs/uikit': 1.0.62(super-three@0.181.0)
-      '@pmndrs/uikit-lucide': 1.0.63(super-three@0.181.0)
-    transitivePeerDependencies:
-      - three
-
-  '@pmndrs/uikit-lucide@1.0.63(super-three@0.181.0)':
-    dependencies:
-      '@pmndrs/uikit': 1.0.62(super-three@0.181.0)
-    transitivePeerDependencies:
-      - three
-
   '@pmndrs/uikit-pub-sub@1.0.62':
     dependencies:
       '@preact/signals-core': 1.12.1
@@ -5732,7 +5685,7 @@ snapshots:
       '@vueuse/shared': 14.2.1(vue@3.5.29(typescript@5.9.3))
       vue: 3.5.29(typescript@5.9.3)
     optionalDependencies:
-      axios: 1.13.4(debug@4.4.3)
+      axios: 1.13.4
       focus-trap: 7.8.0
 
   '@vueuse/metadata@14.2.1': {}
@@ -5878,13 +5831,14 @@ snapshots:
     dependencies:
       possible-typed-array-names: 1.1.0
 
-  axios@1.13.4(debug@4.4.3):
+  axios@1.13.4:
     dependencies:
-      follow-redirects: 1.15.11(debug@4.4.3)
+      follow-redirects: 1.15.11
       form-data: 4.0.5
       proxy-from-env: 1.1.0
     transitivePeerDependencies:
       - debug
+    optional: true
 
   balanced-match@1.0.2: {}
 
@@ -6613,9 +6567,8 @@ snapshots:
     dependencies:
       tabbable: 6.4.0
 
-  follow-redirects@1.15.11(debug@4.4.3):
-    optionalDependencies:
-      debug: 4.4.3
+  follow-redirects@1.15.11:
+    optional: true
 
   for-each@0.3.5:
     dependencies:
@@ -7613,7 +7566,8 @@ snapshots:
       forwarded: 0.2.0
       ipaddr.js: 1.9.1
 
-  proxy-from-env@1.1.0: {}
+  proxy-from-env@1.1.0:
+    optional: true
 
   punycode.js@2.3.1: {}
 
@@ -8387,15 +8341,6 @@ snapshots:
     dependencies:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
-
-  vite-plugin-mkcert@1.17.10(vite@7.3.1(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)):
-    dependencies:
-      axios: 1.13.4(debug@4.4.3)
-      debug: 4.4.3
-      picocolors: 1.1.1
-      vite: 7.3.1(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1)
-    transitivePeerDependencies:
-      - supports-color
 
   vite@7.3.1(@types/node@20.19.25)(terser@5.44.1)(yaml@2.8.1):
     dependencies:

@@ -10,6 +10,9 @@ import commonjs from '@rollup/plugin-commonjs';
 import typescript from '@rollup/plugin-typescript';
 import json from '@rollup/plugin-json';
 
+// `@iwsdk/cli/contract` is bundled on purpose so the published plugin remains
+// self-contained at runtime.
+
 // Plugin build config
 const pluginConfig = {
   input: 'src/index.ts',
@@ -48,47 +51,6 @@ const pluginConfig = {
       preferBuiltins: true,
     }),
     commonjs(),
-    typescript({
-      tsconfig: './tsconfig.json',
-    }),
-  ],
-};
-
-// MCP server build config - bundles dependencies for standalone execution
-const mcpServerConfig = {
-  input: 'src/mcp-server.ts',
-  output: [
-    {
-      file: 'dist/mcp-server.js',
-      format: 'esm',
-      sourcemap: true,
-      banner: '#!/usr/bin/env node',
-    },
-  ],
-  external: [
-    // Only keep Node.js builtins external
-    'path',
-    'fs',
-    'fs/promises',
-    'child_process',
-    'util',
-    'url',
-    'http',
-    'https',
-    'net',
-    'tls',
-    'stream',
-    'events',
-    'buffer',
-    'crypto',
-    'os',
-    'zlib',
-  ],
-  plugins: [
-    nodeResolve({
-      preferBuiltins: true,
-    }),
-    commonjs(),
     json(),
     typescript({
       tsconfig: './tsconfig.json',
@@ -96,4 +58,4 @@ const mcpServerConfig = {
   ],
 };
 
-export default [pluginConfig, mcpServerConfig];
+export default [pluginConfig];

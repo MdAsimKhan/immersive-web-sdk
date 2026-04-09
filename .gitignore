@@ -83,7 +83,6 @@ packages/**/.claude/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/api/
- # (removed: ECS docs were experimental and are no longer generated)
 
 # Generated JavaScript starter (built from /starter)
 /starter-js/
@@ -104,3 +103,6 @@ examples/**/metaspatial/components/
 
 # Local playground (created via `node packages/create/dist/cli.js playground`)
 /playground/
+
+# Local-only notes and artifacts (kept on disk, never committed)
+/.local/

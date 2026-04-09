@@ -41,9 +41,15 @@ You should see output similar to:
 ```
   VITE v7.1.4  ready in 1234 ms
 
-  ➜  Local:   https://localhost:8081/
-  ➜  Network: https://192.168.1.100:8081/
+  ➜  Local:   https://localhost:5173/
+  ➜  Network: https://192.168.1.100:5173/
   ➜  press h + enter to show help
+```
+
+Or, if you prefer a CLI summary after startup:
+
+```bash
+npx iwsdk dev status
 ```
 
 ::: warning HTTPS Required
@@ -76,8 +82,9 @@ On most home networks, you can access the local server directly. **Your headset 
 
 1. **Put on your headset** and navigate to the browser app
 2. **Find your computer's IP address** in the Vite dev server output (look for the "Network" URL)
-   - Example output: `➜  Network: https://192.168.1.100:8081/`
-3. **Enter the development URL** in your headset's browser: `https://192.168.1.100:8081`
+   - Example output: `➜  Network: https://192.168.1.100:5173/`
+   - `npx iwsdk dev status` also reports the current runtime URL
+3. **Enter the development URL** in your headset's browser using the reported network host and port, for example `https://192.168.1.100:5173`
 4. **Accept the certificate warning** (this is normal for local development with self-signed certificates)
 5. **Click "Enter XR"** when the page loads
 
@@ -91,8 +98,8 @@ If accessing via IP address doesn't work due to network restrictions or firewall
    - Open Chrome on your computer and navigate to `chrome://inspect/#devices`
    - Your headset should appear under "Remote Target"
    - Click "Port forwarding..." in Chrome DevTools
-   - Add a rule to forward port `8081` from your computer to your headset
-4. **Access the local server** on your headset by entering `https://localhost:8081` in the browser
+   - Add a rule to forward the port shown in the Local URL from your computer to your headset
+4. **Access the local server** on your headset by entering the forwarded URL, for example `https://localhost:5173`
 5. **Accept the certificate warning** and **click "Enter XR"** when the page loads
 
 Here's what your WebXR experience looks like when running on a Meta Quest 3 device:
@@ -128,7 +135,7 @@ iwsdkDev({
 - **`userAgentException`**: Adds an extra layer of protection by skipping IWER activation if the browser's user agent matches a pattern (like `OculusBrowser`). This ensures IWER won't activate on headsets even when using ADB port forwarding with localhost.
 - **`sem`**: Synthetic Environment Module for AR scene understanding (AR projects only)
 
-To test with IWER, simply open `https://localhost:8081` in your desktop browser and click "Enter XR". Here's what the emulated experience looks like:
+To test with IWER, open the Local URL reported by Vite or `npx iwsdk dev status` in your desktop browser and click "Enter XR". Here's what the emulated experience looks like:
 
 <video autoplay loop muted playsinline>
   <source src="/testing-experience/starter-iwer.mp4" type="video/mp4">

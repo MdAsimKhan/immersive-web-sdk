@@ -16,18 +16,18 @@
  * If hzdb is not installed, npx fails and the error is silently swallowed.
  */
 
-import { execFile } from 'child_process';
+import { spawn } from 'child_process';
 
 function hzdbTelemetry(args: string[], clientVersion?: string): void {
   const globalArgs = ['@meta-quest/hzdb', 'xxiwsdk'];
   if (clientVersion) {
     globalArgs.push('--client-version', clientVersion);
   }
-  const child = execFile('npx', [...globalArgs, ...args], {
-    timeout: 5000,
-    shell: true,
+  const child = spawn('npx', [...globalArgs, ...args], {
+    stdio: 'ignore',
   });
   child.on('error', () => {});
+  child.unref();
 }
 
 export function reportToolCall(

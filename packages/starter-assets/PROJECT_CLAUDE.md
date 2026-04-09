@@ -321,7 +321,7 @@ Semantic code search and API lookup for IWSDK, elics ECS, and dependencies.
 
 ### IWER (Immersive Web Emulation Runtime)
 
-WebXR emulator control for testing without a headset. All tools are prefixed `mcp__iwsdk-dev-mcp__`.
+WebXR emulator control for testing without a headset. Starter projects expose these tools under `mcp__iwsdk__`.
 
 **Session**
 
@@ -383,23 +383,25 @@ WebXR emulator control for testing without a headset. All tools are prefixed `mc
 - **Discover entities:** `ecs_find_entities` (get entity indices) → `ecs_query_entity` (read component data)
 - **Discover schema:** `ecs_list_components` to see field names/types before querying or setting values
 - **Frame-by-frame debugging:** `ecs_pause` → `ecs_step` (count/delta). Must pause before stepping.
-- **Diff state changes:** `ecs_snapshot(label="before")` → trigger action → `ecs_snapshot(label="after")` → `ecs_diff(from="before", to="after")`
-- **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system` to pause one system while others run
+- **Diff state changes:** `ecs_snapshot({"label":"before"})` → trigger action → `ecs_snapshot({"label":"after"})` → `ecs_diff({"from":"before","to":"after"})`
+- **Isolate a system:** `ecs_list_systems` to discover names → `ecs_toggle_system({"name":"SystemName","paused":true})` to pause one system while others run
 - **Look at an object:** `scene_get_hierarchy` → find UUID → `scene_get_object_transform` → use `positionRelativeToXROrigin` with `xr_look_at`
 
 **Connection check — always call first:**
 
 ```
-mcp__iwsdk-dev-mcp__xr_get_session_status
+mcp__iwsdk__xr_get_session_status
 ```
+
+If your tool environment lazily loads MCP schemas, hydrate the `mcp__iwsdk__*` tool definitions first. If MCP tools are still deferred, use the CLI (`npx iwsdk xr status`) for the same check.
 
 If this returns a successful connection, the dev server is ALREADY running. Do NOT start another one.
 
 **Troubleshooting:**
 
-- Dev server not running → Start with `npm run dev`
+- Dev server not running → Start with `npm run dev` (CLI-managed) or `npx iwsdk dev up`
 - Browser tab in background → Bring to foreground (Chrome throttles background tabs)
-- Session not active → Use `mcp__iwsdk-dev-mcp__xr_accept_session`
+- Session not active → Use `mcp__iwsdk__xr_accept_session`
 
 ### hzdb (Meta Quest Device Tools)
 
@@ -675,26 +677,28 @@ Type errors will prevent systems from initializing properly, but may not show er
 **BEFORE starting a dev server, ALWAYS check if one is already running:**
 
 ```
-mcp__iwsdk-dev-mcp__xr_get_session_status
+mcp__iwsdk__xr_get_session_status
 ```
+
+If your tool environment lazily loads MCP schemas, hydrate the `mcp__iwsdk__*` tool definitions first. If MCP tools are still deferred, use `npx iwsdk xr status` instead.
 
 If this returns a successful connection, the dev server is already running. Do NOT start another one.
 
 1. **Type check first:** `npx tsc --noEmit` - fix any errors before proceeding
-2. Check IWER status first: `mcp__iwsdk-dev-mcp__xr_get_session_status`
-3. If not connected, start dev server: `npm run dev`
-4. Open browser to `https://localhost:8081`
-5. Enter XR: `mcp__iwsdk-dev-mcp__xr_accept_session`
+2. Check IWER status first: `mcp__iwsdk__xr_get_session_status` (or `npx iwsdk xr status` if MCP schemas are still deferred)
+3. If not connected, start the CLI-managed dev server: `npm run dev`
+4. If you need the resolved runtime URL or port, run `npx iwsdk dev status`
+5. Enter XR: `mcp__iwsdk__xr_accept_session`
 6. Test interactions with controller tools
 
 ### Debugging Missing Features
 
 If something isn't appearing or working but no errors show in console:
 
-1. **Don't use level filter for console logs** — call `mcp__iwsdk-dev-mcp__browser_get_console_logs` with just `count`, not `level` filter, as you may miss important errors
+1. **Don't use level filter for console logs** — call `mcp__iwsdk__browser_get_console_logs` with just `count`, not `level` filter, as you may miss important errors
 2. **Run type check** — `npx tsc --noEmit` often reveals issues that don't appear as runtime errors
-3. **Check scene hierarchy** — use `mcp__iwsdk-dev-mcp__scene_get_hierarchy` to verify entities exist and find entity indices
+3. **Check scene hierarchy** — use `mcp__iwsdk__scene_get_hierarchy` to verify entities exist and find entity indices
 4. **Reload and check logs immediately** — some errors only appear during initialization
-5. **Inspect ECS state** — use `mcp__iwsdk-dev-mcp__ecs_find_entities` to check if entities have expected components, then `mcp__iwsdk-dev-mcp__ecs_query_entity` to read their values
-6. **Diff before/after** — take `mcp__iwsdk-dev-mcp__ecs_snapshot` before and after an action to see exactly what changed (or didn't)
-7. **Isolate systems** — use `mcp__iwsdk-dev-mcp__ecs_toggle_system` to pause suspect systems one at a time to find which causes the issue
+5. **Inspect ECS state** — use `mcp__iwsdk__ecs_find_entities` to check if entities have expected components, then `mcp__iwsdk__ecs_query_entity` to read their values
+6. **Diff before/after** — take `mcp__iwsdk__ecs_snapshot` before and after an action to see exactly what changed (or didn't)
+7. **Isolate systems** — use `mcp__iwsdk__ecs_toggle_system` to pause suspect systems one at a time to find which causes the issue

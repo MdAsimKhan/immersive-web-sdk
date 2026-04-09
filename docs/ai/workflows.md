@@ -6,12 +6,39 @@ outline: [2, 4]
 
 This page covers practical agent workflow patterns — common sequences of MCP tool calls that accomplish real tasks. Use these as building blocks when instructing your AI agent.
 
+## Runtime-First CLI
+
+The canonical front door is now the `iwsdk` CLI. Use it to:
+
+- start or attach to the active app runtime with `iwsdk dev up`
+- inspect the current runtime state with `iwsdk status`
+- generate stable editor adapter configs with `iwsdk adapter sync`
+- inspect the exported MCP surface with `iwsdk mcp inspect`
+- call the runtime directly with `iwsdk xr ...`, `iwsdk browser ...`, `iwsdk scene ...`, and `iwsdk ecs ...`
+- validate the full live CLI/MCP surface with `pnpm test:cli-mcp-parity`
+
+Managed MCP configs should point to the workspace-local `@iwsdk/cli` entrypoint, not directly to per-run ports. Starter `npm run dev`, explicit `iwsdk dev up`, and `iwsdk adapter sync` all use that same canonical CLI-managed path.
+
+If a workspace still has older port-bound runtime entries checked in, run `iwsdk adapter sync` once to migrate and prune them.
+
+The parity harness spins up two temporary `poke` runtimes, drives every runtime tool through both entrypoints, and fails on any semantic mismatch after normalizing expected per-instance timing noise.
+
+Common CLI/MCP equivalents:
+
+```text
+xr_get_session_status      ↔ iwsdk xr status
+xr_accept_session          ↔ iwsdk xr enter
+browser_screenshot         ↔ iwsdk browser screenshot
+scene_get_hierarchy        ↔ iwsdk scene hierarchy
+ecs_diff                   ↔ iwsdk ecs diff
+```
+
 ## Screenshot-Driven Development
 
 The most basic workflow: make a change, take a screenshot, verify the result.
 
 ```text
-1. xr_get_session_status       → verify MCP connection is live
+1. xr_get_session_status       → verify runtime + browser bridge readiness
 2. Agent modifies code (e.g., changes a material color)
 3. browser_reload_page         → reset the app
 4. xr_accept_session           → enter XR
@@ -20,7 +47,9 @@ The most basic workflow: make a change, take a screenshot, verify the result.
 ```
 
 ::: tip Always call `xr_get_session_status` first
-Before doing anything else, call `xr_get_session_status` to confirm the MCP connection is live and the dev server is running. This avoids acting before the bridge is ready or accidentally starting a duplicate dev server.
+Before doing anything else, call `xr_get_session_status` to confirm the runtime is up and the browser bridge is ready. The response includes browser readiness metadata as well as XR session state.
+
+If your editor defers MCP tool schemas, first hydrate the `mcp__iwsdk__*` tools with the editor's tool-search/discovery step. Until those schemas are loaded, use the equivalent CLI checks (`iwsdk xr status`, `iwsdk dev status`) instead of guessing at the MCP shape.
 :::
 
 ::: tip

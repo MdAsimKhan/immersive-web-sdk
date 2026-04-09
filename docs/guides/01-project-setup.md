@@ -233,6 +233,17 @@ my-iwsdk-app/
 - **`public/audio/`**: Audio files used for sound effects and spatial audio.
 - **`vite.config.ts`**: Build configuration that includes IWSDK-specific plugins for WebXR emulation, UI compilation, and asset optimization.
 
+## Starter Dev Commands
+
+Fresh starters ship the `iwsdk` CLI through `@iwsdk/cli`, so the default commands are:
+
+- `npm run dev` starts the CLI-managed dev session, opens the app, and keeps the terminal attached
+- `npm run dev:runtime` is the internal runtime script the CLI launches
+- `npx iwsdk dev status` shows the current runtime URL/port and adapter state
+- `npx iwsdk dev down` stops the managed runtime if you started it in the background
+
+Vite chooses the actual dev-server port, so treat the reported runtime URL as the source of truth instead of hardcoding a port.
+
 ## What's Next
 
 Perfect! You now have a complete IWSDK project with all dependencies installed and a clear understanding of the project structure.

@@ -161,6 +161,13 @@ export class MCPWebSocketClient {
         console.log('[IWSDK-MCP] Connected');
       }
       this.reconnectAttempts = 0;
+      this.ws?.send(
+        JSON.stringify({
+          type: 'iwsdk_browser_hello',
+          tabId: this.tabId,
+          tabGeneration: this.tabGeneration,
+        }),
+      );
     };
 
     this.ws.onclose = (event) => {

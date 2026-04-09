@@ -32,7 +32,7 @@ export default defineConfig({
 });
 ```
 
-That's it. No extra packages, no separate server — everything is handled by the plugin.
+That's it. No extra packages, no separate server — everything is handled by the plugin/runtime stack, and starter projects already ship the `iwsdk` CLI through `@iwsdk/cli`.
 
 ## Start the Dev Server
 
@@ -41,32 +41,33 @@ npm run dev
 ```
 
 ::: tip
-If you're adding `ai` to an existing project, restart the dev server after changing `vite.config.ts`.
+Starter `npm run dev` routes through `iwsdk dev up --open --foreground`, which lets the CLI manage the dev-server lifecycle, MCP adapter sync, and browser opening. Vite still chooses the real port, so treat the reported runtime URL as the source of truth. The internal runtime script is `dev:runtime`; use the CLI path as the supported entrypoint.
 :::
 
 When the server starts, several things happen automatically:
 
 1. Your normal browser opens with the app (for manual development)
 2. A headless Playwright browser launches in the background (for the AI agent)
-3. An MCP config file is generated (e.g., `.mcp.json` for Claude)
+3. Canonical project-local MCP configs are synced for the configured AI tools
 4. The MCP WebSocket endpoint is registered at `/__iwer_mcp`
 
-With `verbose: true`, you'll see output like:
+If you need the resolved runtime URL, want to inspect adapter state explicitly, or need to confirm that the managed browser bridge is actually connected, run `npx iwsdk dev status`. The `state.browserConnected` field and `state.session.browser` block are the source of truth for browser readiness.
 
-```
-📝 MCP: Generated config files for [claude] (port: 5173)
-🖥️  IWSDK: Headless browser launched
-```
-
-::: tip MCP config files are ephemeral
-The generated config files (`.mcp.json`, `.cursor/mcp.json`, etc.) are created when the dev server starts and cleaned up when it stops. They don't need to be committed to version control.
+::: tip MCP config files are refreshed, not deleted
+The managed config files (`.mcp.json`, `.cursor/mcp.json`, etc.) are intentionally left on disk and refreshed on the next run. `npm run dev` and `iwsdk adapter sync` both write the same canonical workspace-based entries.
 :::
 
 ## Connect Your AI Tool
 
 ### Claude Code
 
-Claude Code automatically discovers the `.mcp.json` file in your project root. Just open Claude Code in your project directory — it will pick up the MCP server on the next prompt.
+Claude Code automatically discovers the `.mcp.json` file in your project root. Just open Claude Code in your project directory and it will discover the MCP server entry.
+
+In environments that lazily load MCP tool schemas, discovery is not the same as runtime readiness:
+
+1. Load the `mcp__iwsdk__*` tool schemas with your editor's tool-search/discovery step if needed.
+2. Call `xr_get_session_status` as the first runtime check once the tool is available.
+3. If MCP tools are still deferred, fall back to the CLI (`npx iwsdk xr status`, `npx iwsdk browser screenshot`, etc.) until the schemas are hydrated.
 
 ### Cursor
 
