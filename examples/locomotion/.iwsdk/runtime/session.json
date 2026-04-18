@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "sessionId": "9e81693f-5986-4215-b490-897c80048a11",
+  "workspaceRoot": "D:\\iwdsdk\\iwsdk-ui\\examples\\locomotion",
+  "pid": 9884,
+  "port": 5173,
+  "localUrl": "https://localhost:5173/",
+  "networkUrls": ["https://192.168.1.40:5173/"],
+  "aiMode": "agent",
+  "aiTools": ["claude"],
+  "browser": {
+    "status": "connected",
+    "connected": true,
+    "connectedClientCount": 1,
+    "lastTransitionAt": "2026-04-18T08:27:23.235Z"
+  },
+  "registeredAt": "2026-04-18T08:27:13.946Z",
+  "updatedAt": "2026-04-18T08:27:23.238Z"
+}

@@ -103,7 +103,10 @@ function isForegroundLaunch(options: CliOptions): boolean {
   return options.foreground === true;
 }
 
-function getRunScriptArgs(packageManager: string, scriptName: string): string[] {
+function getRunScriptArgs(
+  packageManager: string,
+  scriptName: string,
+): string[] {
   switch (packageManager) {
     case 'yarn':
       return [scriptName];
@@ -141,12 +144,11 @@ async function waitForRuntimeSession(
           session,
           exit: null,
           browserReady: false,
-          browserIssue:
-            session.browser.lastError ?? {
-              cause: 'browser_launch_failed',
-              message: 'Managed browser launch failed.',
-              at: session.browser.lastTransitionAt,
-            },
+          browserIssue: session.browser.lastError ?? {
+            cause: 'browser_launch_failed',
+            message: 'Managed browser launch failed.',
+            at: session.browser.lastTransitionAt,
+          },
         };
       }
     }
@@ -166,9 +168,11 @@ async function waitForRuntimeSession(
   return {
     session: lastSession,
     exit: null,
-    browserReady: Boolean(lastSession && (!lastSession.browser || lastSession.browser.connected)),
+    browserReady: Boolean(
+      lastSession && (!lastSession.browser || lastSession.browser.connected),
+    ),
     browserIssue: lastSession?.browser
-      ? lastSession.browser.lastError ?? {
+      ? (lastSession.browser.lastError ?? {
           cause:
             lastSession.browser.status === 'disconnected'
               ? 'connection_lost'
@@ -178,7 +182,7 @@ async function waitForRuntimeSession(
               ? 'Managed browser runtime disconnected before becoming ready.'
               : 'Managed browser did not finish connecting before the timeout elapsed.',
           at: lastSession.browser.lastTransitionAt,
-        }
+        })
       : undefined,
   };
 }
@@ -224,7 +228,9 @@ async function openUrl(url: string): Promise<void> {
   });
 }
 
-async function terminateRuntimeWorkspace(workspaceRoot: string): Promise<unknown> {
+async function terminateRuntimeWorkspace(
+  workspaceRoot: string,
+): Promise<unknown> {
   const state = await getWorkspaceRuntimeState(workspaceRoot);
   const pids = Array.from(
     new Set(
@@ -282,7 +288,8 @@ export async function handleDevUp(
 ): Promise<CliSuccess<unknown> | CliFailure | null> {
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
-    workspace: typeof options.workspace === 'string' ? options.workspace : undefined,
+    workspace:
+      typeof options.workspace === 'string' ? options.workspace : undefined,
     requireRunning: false,
   });
 
@@ -293,9 +300,14 @@ export async function handleDevUp(
     if (openBrowser) {
       await openUrl(existingSession.localUrl);
     }
-    const adapters = await syncStableAdaptersForWorkspace(workspaceRoot, options);
+    const adapters = await syncStableAdaptersForWorkspace(
+      workspaceRoot,
+      options,
+    );
     if (foreground) {
-      io.stdout.write(`[IWSDK] Runtime already running at ${existingSession.localUrl}\n`);
+      io.stdout.write(
+        `[IWSDK] Runtime already running at ${existingSession.localUrl}\n`,
+      );
       return null;
     }
     return createSuccess({
@@ -314,11 +326,17 @@ export async function handleDevUp(
   const stdoutFd = logPath ? openSync(logPath, 'a') : -1;
   const spawnArgs = getRunScriptArgs(packageManager, scriptName);
 
-  const child = spawn(packageManager, spawnArgs, {
+  const executable =
+    process.platform === 'win32' && !packageManager.endsWith('.cmd')
+      ? `${packageManager}.cmd`
+      : packageManager;
+
+  const child = spawn(executable, spawnArgs, {
     cwd: workspaceRoot,
     detached: !foreground,
     stdio: foreground ? 'inherit' : ['ignore', stdoutFd, stdoutFd],
     env: process.env,
+    shell: process.platform === 'win32',
   });
   const childExitPromise = waitForChildExit(child);
   let childExit: ProcessExitResult | null = null;
@@ -346,7 +364,11 @@ export async function handleDevUp(
     openBrowser,
   });
 
-  const waitResult = await waitForRuntimeSession(workspaceRoot, timeoutMs, () => childExit);
+  const waitResult = await waitForRuntimeSession(
+    workspaceRoot,
+    timeoutMs,
+    () => childExit,
+  );
 
   if (!waitResult.session) {
     if (waitResult.exit) {
@@ -410,7 +432,9 @@ export async function handleDevUp(
   }
 
   if (foreground) {
-    io.stdout.write(`[IWSDK] Runtime ready at ${waitResult.session.localUrl}\n`);
+    io.stdout.write(
+      `[IWSDK] Runtime ready at ${waitResult.session.localUrl}\n`,
+    );
     const exit = await childExitPromise;
     if (exit.exitCode && exit.exitCode !== 0) {
       return createFailure(
@@ -444,7 +468,8 @@ export async function handleDevDown(
 ): Promise<CliSuccess<unknown>> {
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
-    workspace: typeof options.workspace === 'string' ? options.workspace : undefined,
+    workspace:
+      typeof options.workspace === 'string' ? options.workspace : undefined,
     requireRunning: false,
   });
   return createSuccess(await terminateRuntimeWorkspace(workspaceRoot));
@@ -456,7 +481,8 @@ export async function handleDevRestart(
 ): Promise<CliSuccess<unknown> | CliFailure | null> {
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
-    workspace: typeof options.workspace === 'string' ? options.workspace : undefined,
+    workspace:
+      typeof options.workspace === 'string' ? options.workspace : undefined,
     requireRunning: false,
   });
 
@@ -470,7 +496,8 @@ export async function handleDevLogs(
 ): Promise<CliSuccess<unknown>> {
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
-    workspace: typeof options.workspace === 'string' ? options.workspace : undefined,
+    workspace:
+      typeof options.workspace === 'string' ? options.workspace : undefined,
     requireRunning: false,
   });
   const launch = await getLaunchMetadata(workspaceRoot);
@@ -499,7 +526,8 @@ export async function handleDevOpen(
 ): Promise<CliSuccess<unknown>> {
   const workspaceRoot = await resolveWorkspaceRoot({
     cwd: io.cwd,
-    workspace: typeof options.workspace === 'string' ? options.workspace : undefined,
+    workspace:
+      typeof options.workspace === 'string' ? options.workspace : undefined,
     requireRunning: true,
   });
   const session = await getRuntimeSession(workspaceRoot);

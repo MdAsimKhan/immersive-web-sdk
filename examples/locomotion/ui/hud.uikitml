@@ -1,0 +1,245 @@
+<style>
+  .hud-container {
+    width: 1000px;
+    height: 600px;
+    background-color: transparent;
+    padding: 30px;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  /* Colors */
+  .color-safe { color: #39FF14; }
+  .color-hazard { color: #FF5F1F; }
+  .bg-panel { background-color: rgba(0, 0, 0, 0.4); }
+
+  /* Top Row: Exit and Compass */
+  .hud-top {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .exit-marker {
+    flex-direction: row;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .exit-icon-box {
+    width: 80px;
+    height: 80px;
+    border: 3px solid #39FF14;
+    border-radius: 8px;
+    justify-content: center;
+    align-items: center;
+    background-color: rgba(57, 255, 20, 0.1);
+  }
+
+  .exit-text {
+    font-size: 32px;
+    font-weight: 800;
+    color: #39FF14;
+    letter-spacing: 1px;
+  }
+
+  /* Compass */
+  .compass-container {
+    width: 400px;
+    height: 60px;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden; /* Mask the overflowing ticks */
+  }
+
+  .compass-n {
+    color: #ffffff;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .compass-viewport {
+    width: 300px;
+    height: 30px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+    position: relative;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .compass-pivoter {
+    flex-direction: row;
+    position: absolute;
+    height: 100%;
+    align-items: flex-end;
+    gap: 40px; /* Space between ticks */
+  }
+
+  .compass-tick {
+    width: 2px;
+    height: 10px;
+    background-color: rgba(255, 255, 255, 0.5);
+  }
+
+  .tick-label {
+    position: absolute;
+    top: -20px;
+    left: -10px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .compass-center-marker {
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 10px solid #39FF14;
+    margin-top: 2px;
+  }
+
+  /* Middle Row: Peripheral Bar */
+  .hud-middle {
+    flex: 1;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  .threat-container {
+    flex-direction: row;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .threat-label {
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+    transform: rotate(-90deg);
+    width: 100px;
+    text-align: center;
+    margin-right: -40px;
+    opacity: 0.8;
+  }
+
+  .threat-bar-outer {
+    width: 25px;
+    height: 350px;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 3px;
+    flex-direction: column-reverse;
+  }
+
+  .threat-bar-fill {
+    width: 100%;
+    border-radius: 10px;
+    background-color: #39FF14;
+    box-shadow: 0 0 15px #39FF14;
+  }
+
+  /* Bottom Row: Vitals and Feedback */
+  .hud-bottom {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .vitals-box {
+    padding: 15px 25px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    gap: 8px;
+  }
+
+  .vital-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .vital-text {
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 20px;
+    font-family: monospace;
+    font-weight: 700;
+  }
+
+  /* Telemetry Extra */
+  .telemetry-text {
+    color: #39FF14;
+    font-size: 12px;
+    font-family: monospace;
+    opacity: 0.8;
+  }
+
+</style>
+
+<Panel id="hud-root" class="hud-container">
+  <!-- Top: Exit Info & Compass -->
+  <div class="hud-top">
+    <div class="exit-marker">
+      <div class="exit-icon-box">
+        <div style="width: 40px; height: 50px; border: 4px solid #39FF14; border-left: none; position: relative;">
+            <div style="width: 20px; height: 4px; background-color: #39FF14; position: absolute; left: -10px; top: 25px;"></div>
+        </div>
+      </div>
+      <div id="exit-info" class="exit-text">EXIT: 12m (40s)</div>
+    </div>
+
+    <div class="compass-container">
+      <div class="compass-viewport">
+        <div id="compass-pivoter" class="compass-pivoter">
+            <!-- Ticks generated or repeated manually for a loop -->
+            <div class="compass-tick"><div class="tick-label">W</div></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"><div class="tick-label">N</div></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"><div class="tick-label">E</div></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"><div class="tick-label">S</div></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"></div>
+            <div class="compass-tick"><div class="tick-label">W</div></div>
+        </div>
+      </div>
+      <div class="compass-center-marker"></div>
+    </div>
+
+    <div style="width: 150px;"></div>
+  </div>
+
+  <!-- Middle: Threat Level -->
+  <div class="hud-middle">
+    <div class="threat-container">
+      <div class="threat-label">THREAT LEVEL</div>
+      <div class="threat-bar-outer">
+        <div id="threat-fill" class="threat-bar-fill" style="height: 30%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom: Vitals & Status -->
+  <div class="hud-bottom">
+    <div class="vitals-box bg-panel">
+      <div class="vital-row">
+        <div style="width: 20px; height: 20px; border-radius: 10px; background-color: #FF5F1F;"></div>
+        <div id="hr-value" class="vital-text">HR: 110</div>
+      </div>
+      <div class="vital-row">
+        <div style="width: 15px; height: 25px; background-color: #39FF14; border-radius: 3px;"></div>
+        <div id="air-value" class="vital-text">SAFE AIR: 5m</div>
+      </div>
+    </div>
+
+    <div style="flex-direction: column; align-items: flex-end; gap: 5px;">
+        <div id="vel-text" class="telemetry-text">VEL: 0.0 m/s</div>
+        <div id="coords-text" class="telemetry-text">0.0, 0.0, 0.0</div>
+    </div>
+  </div>
+</Panel>
