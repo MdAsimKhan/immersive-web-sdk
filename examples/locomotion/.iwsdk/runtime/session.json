@@ -1,19 +1,23 @@
 {
   "schemaVersion": 1,
-  "sessionId": "9e81693f-5986-4215-b490-897c80048a11",
-  "workspaceRoot": "D:\\iwdsdk\\iwsdk-ui\\examples\\locomotion",
-  "pid": 9884,
+  "sessionId": "4cb2d452-4eb8-402b-be59-926d153a7cd3",
+  "workspaceRoot": "C:\\Asim\\immersive-web-sdk\\examples\\locomotion",
+  "pid": 30256,
   "port": 5173,
   "localUrl": "https://localhost:5173/",
-  "networkUrls": ["https://192.168.1.40:5173/"],
+  "networkUrls": [
+    "https://192.168.1.34:5173/"
+  ],
   "aiMode": "agent",
-  "aiTools": ["claude"],
+  "aiTools": [
+    "claude"
+  ],
   "browser": {
     "status": "connected",
     "connected": true,
     "connectedClientCount": 1,
-    "lastTransitionAt": "2026-04-18T08:27:23.235Z"
+    "lastTransitionAt": "2026-04-23T11:08:01.175Z"
   },
-  "registeredAt": "2026-04-18T08:27:13.946Z",
-  "updatedAt": "2026-04-18T08:27:23.238Z"
+  "registeredAt": "2026-04-23T07:06:33.910Z",
+  "updatedAt": "2026-04-23T11:08:01.178Z"
 }

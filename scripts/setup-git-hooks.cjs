@@ -59,7 +59,9 @@ function setupGitHooks() {
       }
 
       fs.writeFileSync(hookPath, hookContent);
-      execSync(`chmod +x ${hookPath}`);
+      if (process.platform !== 'win32') {
+        execSync(`chmod +x ${hookPath}`);
+      }
       console.log('✅ Pre-commit hook configured');
     } catch (error) {
       console.error('❌ Failed to install husky:', error.message);

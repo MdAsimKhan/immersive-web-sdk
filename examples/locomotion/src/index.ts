@@ -36,76 +36,127 @@ const assets: AssetManifest = {
 
 /**
  * System to drive the Emergency First Responder HUD.
- * Handles compass tracking, vitals simulation, and telemetry updates.
+ * - Text: use setProperties({ text: '...' }) NOT children
+ * - Colors: use numeric hex (0xRRGGBB) NOT string — strings silently fail in setProperties
  */
 class EmergencyHUDSystem extends createSystem({
   hud: { required: [PanelUI, Follower, PanelDocument] },
 }) {
+  private smoothedYaw = 0;
+  private lastGuidanceIndex = -1;
+  private guidancePool = ['KEEP CALM', 'CRAWL LOW', 'FIND EXIT', 'CHECK OXYGEN'];
+  private guidanceColors = [0x00FFC8, 0xFF3C00, 0xF39C12, 0x00FFC8];
+  private simTemp = 94;
+  private simSpo2 = 97.5;
+
   update(delta: number, time: number): void {
     this.queries.hud.entities.forEach((entity) => {
-      const config = PanelUI.data.config[entity.index];
-      if (!config || !config.includes('hud.json')) {
-        return;
-      }
-
       const doc = PanelDocument.data.document[entity.index] as any;
-      if (!doc) {
-        return;
+      if (!doc) return;
+
+      // ─── 1. REAL-TIME CLOCK  ───────────────────────────────────────────────
+      // Use `text` property — NOT `children` — to update Text node content.
+      const clock = doc.getElementById('clock-text');
+      if (clock) {
+        const now = new Date();
+        let hours = now.getHours();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const h = hours.toString().padStart(2, '0');
+        const m = now.getMinutes().toString().padStart(2, '0');
+        clock.setProperties({ text: `${h}:${m} ${ampm}` });
       }
 
-      // 1. Simulate Compass based on head orientation
+      // ─── 2. COMPASS — smooth parallax via camera yaw ──────────────────────
       const compassPivoter = doc.getElementById('compass-pivoter');
       if (compassPivoter) {
-        const rotationY = this.camera.rotation.y;
-        const pixelsPerRadian = 300 / (Math.PI / 2);
-        const offset = (rotationY * pixelsPerRadian) % 1200;
-        compassPivoter.setProperties({ left: -offset - 100 });
+        const targetYaw = this.camera.rotation.y;
+        this.smoothedYaw += (targetYaw - this.smoothedYaw) * 0.15;
+        // Full 360° = 1480px ribbon width; keep offset positive
+        const pxPerRadian = 1480 / (Math.PI * 2);
+        const raw = this.smoothedYaw * pxPerRadian;
+        const offset = ((raw % 1480) + 1480) % 1480;
+        compassPivoter.setProperties({ left: -offset });
       }
 
-      // 2. Simulate Vitals and Sensor Readings (every second)
-      if (Math.floor(time) > Math.floor(time - delta)) {
-        const hr = doc.getElementById('hr-value');
-        if (hr) {
-          hr.setProperties({
-            children: [`HR: ${105 + Math.floor(Math.random() * 10)}`],
-          });
-        }
+      // ─── 3. MAP ROTATION (IMU-driven) ─────────────────────────────────────
+      const mapPivoter = doc.getElementById('map-pivoter');
+      if (mapPivoter) {
+        const deg = (-this.smoothedYaw * 180) / Math.PI;
+        mapPivoter.setProperties({ transform: `rotate(${deg}deg)` });
+      }
 
-        const exit = doc.getElementById('exit-info');
-        if (exit) {
-          const dist = 12 - (time % 12);
-          exit.setProperties({
-            children: [
-              `EXIT: ${dist.toFixed(1)}m (${Math.floor(dist * 3.3)}s)`,
-            ],
-          });
-        }
-
-        const threat = doc.getElementById('threat-fill');
-        if (threat) {
-          const level = 40 + Math.sin(time * 0.5) * 20;
-          threat.setProperties({
-            height: `${level}%`,
-            backgroundColor: level > 50 ? 0xff5f1f : 0x39ff14,
+      // ─── 4. SEQUENTIAL GUIDANCE (every 4 s, colour-coded) ─────────────────
+      const guidanceEl = doc.getElementById('guidance-text');
+      if (guidanceEl) {
+        const idx = Math.floor(time / 4) % this.guidancePool.length;
+        if (idx !== this.lastGuidanceIndex) {
+          this.lastGuidanceIndex = idx;
+          guidanceEl.setProperties({
+            text: this.guidancePool[idx],
+            color: this.guidanceColors[idx],
           });
         }
       }
 
-      // 3. Telemetry tracking
-      const vel = doc.getElementById('vel-text');
-      if (vel) {
-        const speed = Math.sin(time) > 0 ? Math.sin(time) * 2 : 0;
-        vel.setProperties({ children: [`VEL: ${speed.toFixed(1)} m/s`] });
-      }
+      // ─── 5. VITALS + SENSORS  (100 ms snappy gate) ────────────────────────
+      if (Math.floor(time * 10) > Math.floor((time - delta) * 10)) {
 
-      const coords = doc.getElementById('coords-text');
-      if (coords) {
-        const pos = this.camera.position;
-        coords.setProperties({
-          children: [
-            `${pos.x.toFixed(1)}, ${pos.y.toFixed(1)}, ${pos.z.toFixed(1)}`,
-          ],
-        });
+        // BPM — slower wave (4 s period), gentle jitter
+        const bpm = Math.round(
+          88 + Math.sin(time * (Math.PI * 2 / 4)) * 10
+             + Math.sin(time * 11.3) * 1.5,
+        );
+
+        // SpO2 — stochastic drift 94-99
+        this.simSpo2 += (Math.random() - 0.5) * 0.08;
+        this.simSpo2 += (96.5 + Math.sin(time * (Math.PI * 2 / 3)) * 2.5 - this.simSpo2) * 0.08;
+        this.simSpo2 = Math.max(94, Math.min(99, this.simSpo2));
+        const spo2 = Math.round(this.simSpo2);
+
+        // Temp — incremental climb (fire proximity), 0.4 °F/s
+        this.simTemp = Math.min(180, this.simTemp + 0.4 * delta);
+        const tempDisplay = Math.round(this.simTemp + Math.sin(time * 47.3) * 0.5);
+
+        // ── Update text (use numeric hex for colors) ──
+        const bpmEl = doc.getElementById('ui_element_bpm');
+        if (bpmEl) bpmEl.setProperties({ text: `${bpm} BPM` });
+
+        const spo2El = doc.getElementById('ui_element_spo2');
+        if (spo2El) spo2El.setProperties({ text: `${Math.round(this.simSpo2)}%` });
+
+        // Heart icon pulse at ~BPM rate
+        const heartIcon = doc.getElementById('heart-icon');
+        if (heartIcon) {
+          heartIcon.setProperties({ opacity: 0.5 + Math.abs(Math.sin(time * Math.PI * 1.33)) * 0.5 });
+        }
+
+        const tempEl = doc.getElementById('temp-value');
+        if (tempEl) {
+          tempEl.setProperties({
+            text: `${Math.round(this.simTemp)}°F`,
+            color: this.simTemp > 120 ? 0xFF3C00 : 0x00FFC8,
+          });
+        }
+
+        // ─── 7. THREAT METER — toggle opacity per segment ───────────────────
+        // Colour is baked into CSS classes (seg-low/mid/high); JS only sets
+        // opacity: 1.0 (lit) or 0.08 (dim). This avoids the class-override
+        // conflict that blocked backgroundColor updates.
+        // Fill level: layered sines → natural random-looking rise/fall
+        const fillLevel = Math.max(0, Math.min(1,
+          0.5
+          + Math.sin(time * 0.4) * 0.3
+          + Math.sin(time * 1.1) * 0.15
+          + Math.sin(time * 2.7) * 0.05,
+        ));
+        const segsToFill = Math.ceil(fillLevel * 15);
+        for (let i = 0; i < 15; i++) {
+          const seg = doc.getElementById(`seg-${i}`);
+          if (!seg) continue;
+          seg.setProperties({ opacity: i < segsToFill ? 1.0 : 0.08 });
+        }
       }
     });
   }
@@ -156,11 +207,10 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   world
     .createTransformEntity()
     .addComponent(PanelUI, {
-      config: './ui/welcome.json',
+      config: '/public/ui/welcome.json',
       maxWidth: 1.8,
       maxHeight: 1.0,
     })
-    .addComponent(RayInteractable)
     .addComponent(PokeInteractable)
     .addComponent(ScreenSpace, {
       top: '20px',
@@ -176,7 +226,7 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   const settingsPanel = world
     .createTransformEntity()
     .addComponent(PanelUI, {
-      config: './ui/settings.json',
+      config: '/public/ui/settings.json',
       maxWidth: 1.8,
       maxHeight: 1.0,
     })
@@ -188,15 +238,15 @@ World.create(document.getElementById('scene-container') as HTMLDivElement, {
   world
     .createTransformEntity()
     .addComponent(PanelUI, {
-      config: './ui/hud.json',
-      maxWidth: 1.0,
+      config: '/public/ui/hud.json',
+      maxWidth: 1.5,
       maxHeight: 1.0,
     })
     .addComponent(Follower, {
       target: world.camera,
-      offsetPosition: [0, 0, -0.3], // Locked in front of camera
+      offsetPosition: [0, -0.01, -0.5], // Moved further back for testing visibility
       behavior: FollowBehavior.FaceTarget,
-      speed: 20, // Very fast to minimize lag
+      speed: 20,
       tolerance: 0,
     });
 
