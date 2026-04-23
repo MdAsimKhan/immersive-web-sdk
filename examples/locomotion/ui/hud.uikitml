@@ -4,6 +4,16 @@
     background-color: transparent;
     font-family: monospace;
     font-weight: 700;
+    position: relative;
+  }
+
+  /* ── Scanline Effect (Global Overlay) ── */
+  .scanlines {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-image: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.1) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.02), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.02));
+    background-size: 100% 3px, 3px 100%;
+    pointer-events: none;
+    opacity: 0.4;
   }
 
   /* ── Curved top header ─────────────────────── */
@@ -92,37 +102,41 @@
   /* ── Right: Temp (removed from here, moved to header) ── */
 
 
-  .threat-cluster {
+  /* ── Thermal Gauge (Threat Meter V3) ── */
+  .gauge-cluster {
     position: absolute; top: 110px; right: 40px;
-    flex-direction: row; align-items: flex-start; gap: 8px;
+    flex-direction: row; align-items: flex-end; gap: 15px;
   }
-  .threat-inner { flex-direction: column; align-items: center; gap: 10px; }
-  .threat-bar-outer {
-    width: 52px; height: 360px;
-    border: 2px solid rgba(255,255,255,0.2);
-    border-radius: 8px;
-    background-color: rgba(0,0,0,0.45);
-    padding: 5px; flex-direction: column-reverse; gap: 4px;
+  .gauge-container {
+    width: 84px; height: 380px;
+    border: 2.5px solid rgba(255, 69, 0, 0.5);
+    border-radius: 14px;
+    background-color: #121212;
+    opacity: 0.8;
+    padding: 8px;
+    flex-direction: column-reverse; /* Fill from bottom */
+    gap: 2px;
+    position: relative;
+    /* Red-to-Cream Border Glow */
+    box-shadow: -5px 5px 20px rgba(255, 60, 0, 0.2), 5px -5px 20px rgba(255, 253, 230, 0.2);
   }
-  /* 15 segments: colour fixed by class, opacity toggled by JS */
-  .seg-low  { flex: 1; border-radius: 3px; background-color: rgba(0,255,200,1); }
-  .seg-mid  { flex: 1; border-radius: 3px; background-color: rgba(243,156,18,1); }
-  .seg-high { flex: 1; border-radius: 3px; background-color: rgba(255,60,0,1); }
 
-  /* Vertical label: stacked individual letters down the side of the bar */
-  .threat-label-strip {
-    width: 18px; height: 360px;
-    flex-direction: column; justify-content: center; align-items: center;
-    gap: 2px; margin-bottom: 0px;
+  .gauge-segment {
+    width: 100%; height: 16px;
+    border-radius: 2px;
+    background-color: rgba(255, 255, 255, 0.05); /* Default "off" state */
   }
-  .vletter {
-    font-size: 11px; letter-spacing: 0px;
-    color: rgba(255,255,255,0.45);
+
+  .gauge-label {
+    flex-direction: column; justify-content: center; align-items: center;
+    gap: 4px; padding-bottom: 20px;
+  }
+  .vletter-v3 {
+    font-size: 14px; font-weight: 900;
+    color: rgba(255, 69, 0, 0.6);
     text-align: center;
   }
 
-  /* ── Map (bottom-left, same bottom as threat) ─── */
-  /* 160×160px circle; bottom:60px aligns with threat bar */
   .map-cluster {
     position: absolute; bottom: 240px; left: 40px;
     width: 160px; height: 160px;
@@ -208,44 +222,41 @@
   <!-- (Temp moved to header) -->
 
 
-  <!-- THREAT METER (bottom-right, base at bottom:60px matches map) -->
-  <div class="threat-cluster">
-    <!-- Stacked letters spelling THREAT·LEVEL vertically beside the bar -->
-    <div class="threat-label-strip">
-      <div class="vletter">T</div>
-      <div class="vletter">H</div>
-      <div class="vletter">R</div>
-      <div class="vletter">E</div>
-      <div class="vletter">A</div>
-      <div class="vletter">T</div>
-      <div class="vletter" style="opacity: 0;">·</div>
-      <div class="vletter">L</div>
-      <div class="vletter">E</div>
-      <div class="vletter">V</div>
-      <div class="vletter">E</div>
-      <div class="vletter">L</div>
+  <!-- THERMAL GAUGE (THREAT V3) -->
+  <div class="gauge-cluster">
+    <div class="gauge-label">
+      <div class="vletter-v3">T</div>
+      <div class="vletter-v3">H</div>
+      <div class="vletter-v3">R</div>
+      <div class="vletter-v3">E</div>
+      <div class="vletter-v3">A</div>
+      <div class="vletter-v3">T</div>
     </div>
-    <!-- Icon + bar column -->
-    <div class="threat-inner">
-      <img src="/icons/threat.png" style="width: 34px; height: 34px; object-fit: contain;" />
-      <div class="threat-bar-outer">
-        <div id="seg-0"  class="seg-low"></div>
-        <div id="seg-1"  class="seg-low"></div>
-        <div id="seg-2"  class="seg-low"></div>
-        <div id="seg-3"  class="seg-low"></div>
-        <div id="seg-4"  class="seg-low"></div>
-        <div id="seg-5"  class="seg-mid"></div>
-        <div id="seg-6"  class="seg-mid"></div>
-        <div id="seg-7"  class="seg-mid"></div>
-        <div id="seg-8"  class="seg-mid"></div>
-        <div id="seg-9"  class="seg-mid"></div>
-        <div id="seg-10" class="seg-high"></div>
-        <div id="seg-11" class="seg-high"></div>
-        <div id="seg-12" class="seg-high"></div>
-        <div id="seg-13" class="seg-high"></div>
-        <div id="seg-14" class="seg-high"></div>
-      </div>
+    
+    <div class="gauge-container">
+      <!-- 20 segments -->
+      <div id="t-seg-0" class="gauge-segment"></div>
+      <div id="t-seg-1" class="gauge-segment"></div>
+      <div id="t-seg-2" class="gauge-segment"></div>
+      <div id="t-seg-3" class="gauge-segment"></div>
+      <div id="t-seg-4" class="gauge-segment"></div>
+      <div id="t-seg-5" class="gauge-segment"></div>
+      <div id="t-seg-6" class="gauge-segment"></div>
+      <div id="t-seg-7" class="gauge-segment"></div>
+      <div id="t-seg-8" class="gauge-segment"></div>
+      <div id="t-seg-9" class="gauge-segment"></div>
+      <div id="t-seg-10" class="gauge-segment"></div>
+      <div id="t-seg-11" class="gauge-segment"></div>
+      <div id="t-seg-12" class="gauge-segment"></div>
+      <div id="t-seg-13" class="gauge-segment"></div>
+      <div id="t-seg-14" class="gauge-segment"></div>
+      <div id="t-seg-15" class="gauge-segment"></div>
+      <div id="t-seg-16" class="gauge-segment"></div>
+      <div id="t-seg-17" class="gauge-segment"></div>
+      <div id="t-seg-18" class="gauge-segment"></div>
+      <div id="t-seg-19" class="gauge-segment"></div>
     </div>
+  </div>
   </div>
 
   <!-- MAP (bottom-left, 160×160, base at bottom:60px matches threat bar) -->
@@ -258,5 +269,8 @@
     <div style="position: absolute; top: 74px; left: 74px; width: 12px; height: 12px; background-color: #ffffff; border-radius: 6px;"></div>
     <div style="position: absolute; top: 62px; left: 75px; width: 0px; height: 0px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 11px solid #ffffff;"></div>
   </div>
+
+  <!-- GLOBAL SCANLINES -->
+  <div class="scanlines"></div>
 
 </Panel>

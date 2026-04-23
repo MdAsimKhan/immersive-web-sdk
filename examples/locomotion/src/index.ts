@@ -140,10 +140,7 @@ class EmergencyHUDSystem extends createSystem({
           });
         }
 
-        // ─── 7. THREAT METER — toggle opacity per segment ───────────────────
-        // Colour is baked into CSS classes (seg-low/mid/high); JS only sets
-        // opacity: 1.0 (lit) or 0.08 (dim). This avoids the class-override
-        // conflict that blocked backgroundColor updates.
+        // ─── 7. THREAT METER V2 — smooth fill & color shift ────────────────
         // Fill level: layered sines → natural random-looking rise/fall
         const fillLevel = Math.max(0, Math.min(1,
           0.5
@@ -151,11 +148,35 @@ class EmergencyHUDSystem extends createSystem({
           + Math.sin(time * 1.1) * 0.15
           + Math.sin(time * 2.7) * 0.05,
         ));
-        const segsToFill = Math.ceil(fillLevel * 15);
-        for (let i = 0; i < 15; i++) {
-          const seg = doc.getElementById(`seg-${i}`);
+        
+        // ─── 7. THERMAL GAUGE (THREAT V3) — 20-segment non-linear gradient ──
+        const segsToFill = Math.ceil(fillLevel * 20);
+        const palette = [
+          0x800020, 0x800020, 0x800020, 0x800020, 0x800020, // 0-4: Burgundy
+          0xFF3C00, 0xFF3C00, 0xFF3C00, 0xFF3C00,           // 5-8: Red
+          0xF39C12, 0xFFA500, 0xFFFF00, 0xFFA500,           // 9-12: Orange/Yellow
+          0xFF3C00, 0xFF3C00, 0xFF3C00, 0xFF3C00,           // 13-16: Red
+          0x5C4033, 0x5C4033, 0x5C4033                      // 17-19: Dark Red
+        ];
+
+        for (let i = 0; i < 20; i++) {
+          const seg = doc.getElementById(`t-seg-${i}`);
           if (!seg) continue;
-          seg.setProperties({ opacity: i < segsToFill ? 1.0 : 0.08 });
+
+          if (i < segsToFill) {
+            const color = palette[i];
+            seg.setProperties({
+              backgroundColor: color,
+              boxShadow: `0px 0px 8px ${color.toString(16).padStart(6, '0')}`,
+              opacity: 1.0
+            });
+          } else {
+            seg.setProperties({
+              backgroundColor: 0x222222,
+              boxShadow: 'none',
+              opacity: 0.1
+            });
+          }
         }
       }
     });
