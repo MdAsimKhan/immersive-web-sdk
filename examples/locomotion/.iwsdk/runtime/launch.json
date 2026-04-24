@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "workspaceRoot": "C:\\Asim\\immersive-web-sdk\\examples\\locomotion",
-  "pid": 23128,
+  "pid": 21460,
   "command": "npm",
   "args": [
     "run",
@@ -9,7 +9,7 @@
   ],
   "logPath": null,
   "scriptName": "dev:runtime",
-  "port": 5173,
+  "port": 5174,
   "openBrowser": true,
-  "createdAt": "2026-04-23T18:42:51.376Z"
+  "createdAt": "2026-04-24T09:45:52.358Z"
 }

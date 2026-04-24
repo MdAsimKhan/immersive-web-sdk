@@ -54,8 +54,7 @@ class EmergencyHUDSystem extends createSystem({
       const doc = PanelDocument.data.document[entity.index] as any;
       if (!doc) return;
 
-      // ─── 1. REAL-TIME CLOCK  ───────────────────────────────────────────────
-      // Use `text` property — NOT `children` — to update Text node content.
+      // ─── 1. REAL-TIME CLOCK (Blinking Colon) ──────────────────────────────
       const clock = doc.getElementById('clock-text');
       if (clock) {
         const now = new Date();
@@ -65,7 +64,10 @@ class EmergencyHUDSystem extends createSystem({
         hours = hours ? hours : 12;
         const h = hours.toString().padStart(2, '0');
         const m = now.getMinutes().toString().padStart(2, '0');
-        clock.setProperties({ text: `${h}:${m} ${ampm}` });
+
+        // Blink colon: visible for 0.5s, hidden for 0.5s
+        const colon = (time % 1.0) > 0.5 ? ':' : ' ';
+        clock.setProperties({ text: `${h}${colon}${m} ${ampm}` });
       }
 
       // ─── 2. COMPASS — smooth parallax via camera yaw ──────────────────────
@@ -106,7 +108,7 @@ class EmergencyHUDSystem extends createSystem({
         // BPM — slower wave (4 s period), gentle jitter
         const bpm = Math.round(
           88 + Math.sin(time * (Math.PI * 2 / 4)) * 10
-             + Math.sin(time * 11.3) * 1.5,
+          + Math.sin(time * 11.3) * 1.5,
         );
 
         // SpO2 — stochastic drift 94-99
@@ -117,7 +119,6 @@ class EmergencyHUDSystem extends createSystem({
 
         // Temp — incremental climb (fire proximity), 0.4 °F/s
         this.simTemp = Math.min(180, this.simTemp + 0.4 * delta);
-        const tempDisplay = Math.round(this.simTemp + Math.sin(time * 47.3) * 0.5);
 
         // ── Update text (use numeric hex for colors) ──
         const bpmEl = doc.getElementById('ui_element_bpm');
@@ -126,12 +127,7 @@ class EmergencyHUDSystem extends createSystem({
         const spo2El = doc.getElementById('ui_element_spo2');
         if (spo2El) spo2El.setProperties({ text: `${Math.round(this.simSpo2)}%` });
 
-        // Heart icon pulse at ~BPM rate
-        const heartIcon = doc.getElementById('heart-icon');
-        if (heartIcon) {
-          heartIcon.setProperties({ opacity: 0.5 + Math.abs(Math.sin(time * Math.PI * 1.33)) * 0.5 });
-        }
-
+        // Icons are now pulsed via CSS animation in the uikitml template.
         const tempEl = doc.getElementById('temp-value');
         if (tempEl) {
           tempEl.setProperties({
@@ -148,7 +144,7 @@ class EmergencyHUDSystem extends createSystem({
           + Math.sin(time * 1.1) * 0.15
           + Math.sin(time * 2.7) * 0.05,
         ));
-        
+
         // ─── 7. THERMAL GAUGE (THREAT V3) — 20-segment non-linear gradient ──
         const segsToFill = Math.ceil(fillLevel * 20);
         const palette = [

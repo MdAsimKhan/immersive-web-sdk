@@ -16,33 +16,24 @@
     opacity: 0.4;
   }
 
-  /* ── Curved top header ─────────────────────── */
+  /* ── Image-based header ────────────────────── */
   .header-bar {
-    position: absolute; top: 0px; left: 0px;
-    width: 1500px; height: 80px;
-    flex-direction: row; justify-content: space-between;
+    position: absolute; top: -60px; left: 0px;
+    width: 1510px; height: 120px;
+    flex-direction: row; justify-content: flex-end; align-items: center;
+    padding-left: 200px; gap: 30px;
   }
-  .curve-left {
-    width: 480px; height: 80px;
-    border-bottom: 2px solid rgba(0,255,200,0.7);
-    border-bottom-right-radius: 60px;
-    background-color: rgba(0,30,30,0.35);
+  .header-asset {
+    position: absolute; top: 0; left: 0;
+    width: 1510px; height: 120px;
+    object-fit: contain;
+    object-position: top;
+    opacity: 0.8;
   }
-  .curve-center {
-    width: 540px; height: 50px;
-    background-color: rgba(0,30,30,0.35);
-    border-bottom: 2px solid rgba(0,255,200,0.7);
-    border-bottom-radius: 60px;
-    align-items: center; justify-content: flex-end;
-  }
-  .curve-right {
-    width: 480px; height: 80px;
-    border-bottom: 2px solid rgba(0,255,200,0.7);
-    border-bottom-left-radius: 60px;
-    background-color: rgba(0,30,30,0.35);
-    flex-direction: row;
-    justify-content: flex-end; align-items: center;
-    padding-right: 40px; gap: 30px;
+  .header-data-group {
+    flex-direction: row; gap: 30px;
+    margin-right: 7.5%; /* Move 50% left from right-aligned position */
+    margin-top: -15px;  /* Move 25% of 120px height up */
   }
 
   /* ── Colors ───────────────────────────────── */
@@ -53,14 +44,14 @@
 
   /* ── Vitals (top-left) ────────────────────── */
   .vitals-cluster {
-    position: absolute; top: 18px; left: 40px;
+    position: absolute; top: -25px; left: 60px;
     flex-direction: row; align-items: center; gap: 20px;
   }
   .vital-pair { flex-direction: row; align-items: center; gap: 10px; }
 
   /* ── Nav (left column) ────────────────────── */
   .nav-cluster {
-    position: absolute; top: 110px; left: 40px;
+    position: absolute; top: 90px; left: 40px;
     flex-direction: column; gap: 14px;
   }
   /* Arrow: no border, no bg */
@@ -138,36 +129,45 @@
   }
 
   .map-cluster {
-    position: absolute; bottom: 240px; left: 40px;
+    position: absolute; bottom: 450px; left: 40px;
     width: 160px; height: 160px;
     border-radius: 80px;
-    border: 2px solid rgba(0,255,200,0.4);
     background-color: rgba(0,25,25,0.6);
+    border: 2px solid rgba(255, 255, 255, 1);
     overflow: hidden;
     justify-content: center; align-items: center;
+  }
+
+  /* ── Animations ───────────────────────────── */
+  @keyframes pulse-scale {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.2); }
+    100% { transform: scale(1); }
+  }
+  .pulse-icon {
+    animation: pulse-scale 1.5s ease-in-out infinite;
   }
 </style>
 
 <Panel id="hud-root" class="hud-root">
 
-  <!-- HEADER CURVES (clock lives inside curve-right) -->
+  <!-- HEADER IMAGE ASSET (replaces curve divs) -->
   <div class="header-bar">
-    <div class="curve-left"></div>
-    <div class="curve-center"></div>
-    <div class="curve-right">
+    <img src="/icons/header.png" class="header-asset" />
+    <div class="header-data-group">
       <div id="clock-text" class="white" style="font-size: 26px; letter-spacing: 2px;">00:00</div>
-      <div id="temp-value" class="red" style="font-size: 32px; letter-spacing: 1px;">94°F</div>
+      <div id="temp-value" style="font-size: 32px; letter-spacing: 1px; filter: drop-shadow(0px 0px 6px #000);">94°F</div>
     </div>
   </div>
 
   <!-- TOP-LEFT: VITALS -->
   <div class="vitals-cluster">
     <div class="vital-pair">
-      <img id="heart-icon" src="/icons/heart.png" style="width: 30px; height: 30px; object-fit: contain;" />
+      <img id="heart-icon" class="pulse-icon" src="/icons/heart.png" style="width: 30px; height: 30px; object-fit: contain;" />
       <div id="ui_element_bpm" class="white" style="font-size: 28px; letter-spacing: 2px;">84 BPM</div>
     </div>
     <div class="vital-pair" style="margin-left: 20px;">
-      <img src="/icons/o2.png" style="width: 30px; height: 30px; object-fit: contain;" />
+      <img id="o2-icon" class="pulse-icon" src="/icons/o2.png" style="width: 30px; height: 30px; object-fit: contain;" />
       <div id="ui_element_spo2" class="white" style="font-size: 28px; letter-spacing: 2px;">97%</div>
     </div>
   </div>
@@ -265,9 +265,6 @@
     <div id="map-pivoter" style="position: absolute; top: 0px; left: 0px; width: 160px; height: 160px; justify-content: center; align-items: center;">
       <img src="/icons/map.png" style="position: absolute; width: 100px; height: 100px; object-fit: contain; opacity: 0.4;" />
     </div>
-    <!-- Static user dot (centre of circle) -->
-    <div style="position: absolute; top: 74px; left: 74px; width: 12px; height: 12px; background-color: #ffffff; border-radius: 6px;"></div>
-    <div style="position: absolute; top: 62px; left: 75px; width: 0px; height: 0px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 11px solid #ffffff;"></div>
   </div>
 
   <!-- GLOBAL SCANLINES -->
